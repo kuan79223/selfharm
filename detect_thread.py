@@ -15,7 +15,7 @@ from utils.plots import colors, plot_one_box
 from utils.datasets import letterbox
 from pathlib import Path
 
-import pose_estimator
+import pose_estimator   
 
 CONF_THRESHOLD = 0.45
 IOU_THRESHOLD = 0.25
@@ -211,10 +211,10 @@ class DetectThread(threading.Thread):
 
                                 filename_base = f'Event_Cam{self.cam_id}_{timestamp}'
                                 # 1. 最終檔名 (給 UI 看的)
-                                self.final_cam_path = self.save_dir / f'{filename_base}.mp4'
+                                self.final_cam_path = self.base_dir / f'{filename_base}.mp4'
                                 # 2. 暫存檔名 (給 OpenCV 寫入用的，Server 會隱藏它)
                                 # 重點：必須保留 .mp4 結尾，OpenCV 才會錄製！
-                                self.temp_cam_path = str(self.save_dir / f'{filename_base}_TEMP.mp4')
+                                self.temp_cam_path = str(self.base_dir / f'{filename_base}_TEMP.mp4')
                                 
                                 # self.temp_cam_path = str(self.final_cam_path) + ".temp"
 
