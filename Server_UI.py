@@ -2,11 +2,11 @@ import sys
 import os
 import cv2
 import time
-import shutil  # 用於檔案複製 (匯出功能)
+import shutil
 import threading
 import torch
 import numpy as np
-from datetime import date, datetime
+from datetime import date, datetime, timedelta  # 【新增】timedelta 用於計算午夜時間差
 from pathlib import Path
 
 # PyQt6 UI 模組
@@ -27,7 +27,7 @@ from utils.torch_utils import select_device
 import globals as gl
 
 # ==========================================
-# 後端核心 (負責 AI 與 影像採集)
+# 後端核心
 # ==========================================
 class BackendSystem:
     def __init__(self):
@@ -42,7 +42,7 @@ class BackendSystem:
         self.model(torch.zeros(1, 3, 640, 640).to(self.device).type_as(next(self.model.parameters())))
         self.model_lock = threading.Lock()
 
-        # 2. 設定網路相機 (ZMQ)
+        # 2. 設定網路相機
         CAM0_PORT = 5555
         CAM1_PORT = 5556
         print(f"啟動 ZMQ 接收: Port {CAM0_PORT}, {CAM1_PORT}")
@@ -51,18 +51,19 @@ class BackendSystem:
         self.cams.append(CameraThread(port=CAM0_PORT, name='Cam0', rotate=True))
         self.cams.append(CameraThread(port=CAM1_PORT, name='Cam1', rotate=True))
 
-        # 3. 準備錄影路徑
-        today = date.today().strftime("%Y/%m/%d")
+        # 3. 準備路徑
         base_path = Path(self.BASE_VIDEO_DIR)
-        save_dir = base_path / today
-        save_dir.mkdir(parents=True, exist_ok=True)
-        print(f"錄影路徑: {save_dir}")
+        base_path.mkdir(parents=True, exist_ok=True)
+        
+        # 提供給 UI 初始化用的「今日路徑」
+        self.current_ui_path = str((base_path / date.today().strftime("%Y/%m/%d")).resolve())
+        print(f"系統根目錄: {self.BASE_VIDEO_DIR}")
 
         # 4. 啟動推論執行緒
         self.threads = []
         for i, cam in enumerate(self.cams):
             t = DetectThread(i, cam, self.model, self.model_lock, self.device,
-                             save_dir, cam.fps, self.model.names, 
+                             base_path, cam.fps, self.model.names, 
                              self.device.type != 'cpu', imgsz=640)
             t.start()
             self.threads.append(t)
@@ -82,8 +83,12 @@ class BackendSystem:
 
     def stop(self):
         print("--- 正在關閉系統 ---")
-        import detect_thread
-        detect_thread.STOP_EVENT.set()
+        try:
+            import detect_thread
+            detect_thread.STOP_EVENT.set()
+        except:
+            pass
+            
         for cam in self.cams:
             if hasattr(cam, 'stop'): cam.stop()
         for t in self.threads:
@@ -91,7 +96,7 @@ class BackendSystem:
         print("--- 系統已安全中止 ---")
 
 # ==========================================
-# 前端 UI (依照新設計圖實作)
+# 前端 UI
 # ==========================================
 class StandaloneWindow(QWidget):
     def __init__(self, backend):
@@ -99,11 +104,10 @@ class StandaloneWindow(QWidget):
         self.backend = backend
         
         self.setWindowTitle("AIoT Surveillance System (Standalone)")
-        # 設定視窗預設最大化，或是固定解析度
-        self.resize(1600, 900)
+        self.resize(1700, 950)
         
-        # 用來記錄 UI 目前是否處於紅燈狀態 (避免重複刷新 Log)
         self.ui_alert_active = False 
+        self.current_date_str = datetime.now().strftime("%Y/%m/%d")
 
         self.setup_ui()
         
@@ -112,16 +116,14 @@ class StandaloneWindow(QWidget):
         self.timer.timeout.connect(self.update_frames)
         self.timer.start(30) 
 
+        # 【修改 1】 啟動午夜更新排程 (不再使用每 10 秒的 Timer)
+        self.schedule_midnight_update()
+
     def setup_ui(self):
-        # -------------------------------------------------
-        # 1. 左側區域：上(相機) + 下(按鈕與日誌)
-        # -------------------------------------------------
-        
-        # --- A. 相機顯示區 (Top Left) ---
+        # --- A. 相機顯示區 ---
         self.label_cam0 = QLabel("等待 Cam0 連線...")
         self.label_cam1 = QLabel("等待 Cam1 連線...")
         
-        # 設定樣式：深藍色背景 (參考圖片)
         cam_style = """
             QLabel {
                 background-color: black; 
@@ -133,47 +135,49 @@ class StandaloneWindow(QWidget):
         for lbl in [self.label_cam0, self.label_cam1]:
             lbl.setStyleSheet(cam_style)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setMinimumSize(400, 300)
+            lbl.setFixedSize(640, 480) 
             lbl.setScaledContents(True)
 
         layout_cams = QHBoxLayout()
+        layout_cams.addStretch() 
         layout_cams.addWidget(self.label_cam0)
         layout_cams.addWidget(self.label_cam1)
-        layout_cams.setSpacing(5)
+        layout_cams.addStretch() 
+        layout_cams.setSpacing(20)
 
-        # --- B. 控制區 (Bottom Left) ---
-        
-        # 自傷行為按鈕 (圓形/方形切換)
+        # --- B. 控制區 ---
         self.btn_alert = QPushButton("自傷行為\n(監控中)")
-        self.btn_alert.setFixedSize(200, 200) # 設定為正方形，可用 border-radius 變圓
+        self.btn_alert.setFixedSize(200, 200)
         self.btn_alert.clicked.connect(self.reset_alert_state)
         
-        # 定義樣式 (Normal: 白底; Alert: 紅底)
+        # 【修改 2】 預設將按鈕設為不可點擊 (Disabled)
+        self.btn_alert.setEnabled(False)
+        
+        # 定義樣式 (Normal 時顏色可以稍微淡一點表示未啟用，或保持白色但不可按)
         self.style_normal = """
             QPushButton {
-                background-color: white;
-                color: black;
+                background-color: #f0f0f0; /* 稍微灰一點表示待機 */
+                color: #555555;
                 font-size: 24px;
                 font-weight: bold;
-                border: 2px solid black;
-                border-radius: 100px; /* 變圓形 */
+                border: 2px solid #999999;
+                border-radius: 100px;
             }
         """
         self.style_alert = """
             QPushButton {
-                background-color: #c0392b; /* 紅色 */
+                background-color: #c0392b;
                 color: white;
                 font-size: 24px;
                 font-weight: bold;
                 border: 4px solid #e74c3c;
-                border-radius: 100px; /* 變圓形 */
+                border-radius: 100px;
             }
         """
         self.btn_alert.setStyleSheet(self.style_normal)
 
-        # 滾動日誌視窗 (QTextEdit)
         self.log_area = QTextEdit()
-        self.log_area.setReadOnly(True) # 唯讀
+        self.log_area.setReadOnly(True)
         self.log_area.setStyleSheet("""
             QTextEdit {
                 background-color: white;
@@ -182,54 +186,52 @@ class StandaloneWindow(QWidget):
             }
         """)
         self.log_area.setPlaceholderText("系統啟動... 等待事件觸發...")
-        self.log_area.setMinimumHeight(200)
+        self.log_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout_controls = QHBoxLayout()
         layout_controls.addWidget(self.btn_alert)
         layout_controls.addWidget(self.log_area)
         
-        # 左側總成 (Vertical)
         layout_left_panel = QVBoxLayout()
-        layout_left_panel.addLayout(layout_cams, stretch=3)     # 上半部佔 3 等份
-        layout_left_panel.addLayout(layout_controls, stretch=1) # 下半部佔 1 等份
+        layout_left_panel.addStretch(1) 
+        layout_left_panel.addLayout(layout_cams)     
+        layout_left_panel.addSpacing(10)
+        layout_left_panel.addLayout(layout_controls, stretch=1) 
 
         container_left = QWidget()
         container_left.setLayout(layout_left_panel)
 
         # -------------------------------------------------
-        # 2. 右側區域：檔案總管 (NX端資料夾)
+        # 2. 右側區域
         # -------------------------------------------------
-        self.file_label = QLabel(f"NX端資料夾: {self.backend.BASE_VIDEO_DIR}")
+        target_path = self.backend.current_ui_path
+        
+        self.file_label = QLabel(f"今日錄影目錄: {self.current_date_str}")
         self.file_label.setStyleSheet("color: white; font-weight: bold; font-size: 14px; background: #154360; padding: 5px;")
         
-        # 使用 QFileSystemModel 來顯示真實檔案系統
         self.file_model = QFileSystemModel()
-        root_path = self.backend.BASE_VIDEO_DIR
-        
-        # 如果路徑不存在，先建立以免報錯
-        if not os.path.exists(root_path):
-            os.makedirs(root_path)
+        if not os.path.exists(target_path):
+            os.makedirs(target_path)
 
-        self.file_model.setRootPath(root_path)
-        # 設定只顯示 MP4 檔案與資料夾
-        self.file_model.setNameFilters(["*.mp4"])
+        self.file_model.setRootPath(target_path)
+        self.file_model.setFilter(QDir.Filter.NoDotAndDotDot | QDir.Filter.AllDirs | QDir.Filter.Files)
+        self.file_model.setNameFilters(["*.mp4", "*.avi"]) 
         self.file_model.setNameFilterDisables(False)
 
         self.file_tree = QTreeView()
         self.file_tree.setModel(self.file_model)
-        self.file_tree.setRootIndex(self.file_model.index(root_path))
+        self.file_tree.setRootIndex(self.file_model.index(target_path))
         
-        # 外觀設定
         self.file_tree.setAlternatingRowColors(True)
         self.file_tree.setAnimated(True)
         self.file_tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.file_tree.setColumnWidth(0, 300) # 檔名欄位寬一點
         
-        # 啟用右鍵選單 (匯出功能)
+        self.file_tree.setColumnHidden(2, True) 
+        self.file_tree.setColumnHidden(3, True)
+        self.file_tree.setColumnWidth(0, 280) 
+        
         self.file_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.file_tree.customContextMenuRequested.connect(self.open_context_menu)
-        
-        # 雙擊開啟
         self.file_tree.doubleClicked.connect(self.open_file_system)
 
         layout_right_panel = QVBoxLayout()
@@ -237,53 +239,80 @@ class StandaloneWindow(QWidget):
         layout_right_panel.addWidget(self.file_tree)
         
         container_right = QWidget()
-        container_right.setStyleSheet("background-color: #21618c;") # 設定右側背景色
+        container_right.setStyleSheet("background-color: #21618c;") 
         container_right.setLayout(layout_right_panel)
 
-        # -------------------------------------------------
-        # 3. 主佈局：左右分割
-        # -------------------------------------------------
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(container_left)
         splitter.addWidget(container_right)
-        splitter.setStretchFactor(0, 3) # 左邊寬一點
-        splitter.setStretchFactor(1, 1) # 右邊窄一點
+        splitter.setSizes([1400, 300]) 
 
         main_layout = QHBoxLayout()
         main_layout.addWidget(splitter)
         self.setLayout(main_layout)
         
-        # 設定整體背景色 (像圖片一樣的深藍底)
         self.setStyleSheet("background-color: #2c3e50;")
 
     # ==========================================
     # 邏輯功能區
     # ==========================================
-    
-    def update_frames(self):
-        """ 定時從後端獲取影像與狀態 """
-        alert_triggered = False
+
+    def schedule_midnight_update(self):
+        """ 【新增】 計算距離明天 00:00:05 還有多久，設定一次性定時器 """
+        now = datetime.now()
+        # 取得明天日期
+        tomorrow = now + timedelta(days=1)
+        # 設定為明天的 00:00:05 (多5秒緩衝，確保系統時間已跳轉)
+        midnight = datetime(year=tomorrow.year, month=tomorrow.month, day=tomorrow.day, hour=0, minute=0, second=5)
         
-        # 更新 Cam 0
+        # 計算時間差 (秒)
+        seconds_until_midnight = (midnight - now).total_seconds()
+        ms_until_midnight = int(seconds_until_midnight * 1000)
+        
+        print(f"[系統排程] 將於 {seconds_until_midnight:.1f} 秒後 ({midnight}) 執行日期更新檢查")
+        
+        # 設定 SingleShot Timer (只執行一次)
+        QTimer.singleShot(ms_until_midnight, self.perform_date_update)
+
+    def perform_date_update(self):
+        """ 執行跨日更新邏輯，並排程下一次檢查 """
+        now_str = datetime.now().strftime("%Y/%m/%d")
+        
+        if now_str != self.current_date_str:
+            print(f"[UI] 執行跨日更新！ {self.current_date_str} -> {now_str}")
+            self.current_date_str = now_str
+            
+            # 更新介面
+            self.file_label.setText(f"今日錄影目錄: {self.current_date_str}")
+            new_path = os.path.join(self.backend.BASE_VIDEO_DIR, now_str)
+            if not os.path.exists(new_path):
+                os.makedirs(new_path)
+            self.file_tree.setRootIndex(self.file_model.index(new_path))
+            
+            self.log_area.append(f"[{datetime.now().strftime('%H:%M:%S')}] 跨日更新完成，切換至新目錄。")
+            self.log_area.moveCursor(QTextCursor.MoveOperation.End)
+        
+        # 遞迴呼叫，排程「後天」的午夜更新 (形成每日循環)
+        self.schedule_midnight_update()
+
+    def update_frames(self):
+        alert_triggered = False
         data0 = self.backend.get_frame(0)
         if data0:
             frame, is_alert = data0
             self.show_frame(self.label_cam0, frame)
             if is_alert: alert_triggered = True
 
-        # 更新 Cam 1
         data1 = self.backend.get_frame(1)
         if data1:
             frame, is_alert = data1
             self.show_frame(self.label_cam1, frame)
             if is_alert: alert_triggered = True
             
-        # 處理警報邏輯 (Latching)
         if alert_triggered and not self.ui_alert_active:
             self.trigger_alert_ui()
 
     def show_frame(self, label, frame):
-        # OpenCV (BGR) -> Qt (RGB)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
         bytes_per_line = ch * w
@@ -291,67 +320,56 @@ class StandaloneWindow(QWidget):
         label.setPixmap(QPixmap.fromImage(qimg))
 
     def trigger_alert_ui(self):
-        """ 觸發紅燈與日誌紀錄 """
         self.ui_alert_active = True
         self.btn_alert.setText("⚠️ 異常發生 ⚠️\n點擊重置")
         self.btn_alert.setStyleSheet(self.style_alert)
         
-        # 寫入日誌
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_msg = f"[{timestamp}] 偵測到自傷行為！"
-        self.log_area.append(log_msg)
+        # 【修改 3】 警報發生時，啟用按鈕讓使用者可以點擊
+        self.btn_alert.setEnabled(True)
         
-        # 自動捲動到底部
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.log_area.append(f"[{timestamp}] 偵測到自傷行為！")
         self.log_area.moveCursor(QTextCursor.MoveOperation.End)
 
     def reset_alert_state(self):
-        """ 使用者按下按鈕重置 """
         print("使用者手動重置警報...")
         self.backend.reset_alert()
         self.ui_alert_active = False
         self.btn_alert.setText("自傷行為\n(監控中)")
         self.btn_alert.setStyleSheet(self.style_normal)
         
-        # 寫入日誌
+        # 【修改 4】 重置後，再次禁用按鈕
+        self.btn_alert.setEnabled(False)
+        
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_area.append(f"[{timestamp}] 警報已手動解除。")
 
-    # --- 檔案總管功能 ---
-
     def open_context_menu(self, position):
-        """ 右鍵選單：匯出檔案 """
         indexes = self.file_tree.selectedIndexes()
         if len(indexes) > 0:
             index = indexes[0]
             file_path = self.file_model.filePath(index)
-            
             menu = QMenu()
             action_open = QAction("開啟 (Open)", self)
             action_export = QAction("匯出/下載 (Export)", self)
-            
             action_open.triggered.connect(lambda: self.open_file_system(index))
             action_export.triggered.connect(lambda: self.export_file(file_path))
-            
             menu.addAction(action_open)
             menu.addAction(action_export)
             menu.exec(self.file_tree.viewport().mapToGlobal(position))
 
     def open_file_system(self, index):
-        """ 雙擊開啟檔案 """
         file_path = self.file_model.filePath(index)
-        # 使用 Linux 預設程式開啟 (xdg-open)
         import subprocess
         try:
-            subprocess.Popen(['xdg-open', file_path])
+            print(f"嘗試使用 VLC 播放: {file_path}")
+            subprocess.Popen(['vlc', file_path])
         except Exception as e:
-            QMessageBox.warning(self, "錯誤", f"無法開啟檔案: {e}")
+            QMessageBox.warning(self, "錯誤", f"無法開啟 VLC: {e}")
 
     def export_file(self, source_path):
-        """ 模擬下載：將檔案複製到使用者選擇的地方 (如隨身碟) """
         is_dir = os.path.isdir(source_path)
-        
         if is_dir:
-            # 選擇匯出資料夾的位置
             target_dir = QFileDialog.getExistingDirectory(self, "選擇匯出目的地")
             if target_dir:
                 folder_name = os.path.basename(source_path)
@@ -362,7 +380,6 @@ class StandaloneWindow(QWidget):
                 except Exception as e:
                     QMessageBox.warning(self, "錯誤", f"匯出失敗: {e}")
         else:
-            # 選擇存檔檔名
             file_name = os.path.basename(source_path)
             target_file, _ = QFileDialog.getSaveFileName(self, "另存新檔", file_name)
             if target_file:
@@ -372,7 +389,6 @@ class StandaloneWindow(QWidget):
                 except Exception as e:
                     QMessageBox.warning(self, "錯誤", f"匯出失敗: {e}")
 
-    # --- 關閉程式 ---
     def closeEvent(self, event):
         reply = QMessageBox.question(self, '關閉確認', "確定要結束監控系統嗎？",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 

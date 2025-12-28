@@ -13,6 +13,7 @@ from utils.general import check_img_size, non_max_suppression_kpt, scale_coords,
 from utils.torch_utils import select_device, time_synchronized
 from utils.plots import colors, plot_one_box
 from utils.datasets import letterbox
+from pathlib import Path
 
 import pose_estimator
 
@@ -26,9 +27,51 @@ GREEN = (0, 255, 0)
 
 STOP_EVENT = threading.Event()
 
+
+
+# 通用牆壁繪製函數
+def draw_wall_lines(img, center, ceiling_start, left_wall_end, right_wall_end, color=WHITE, thickness=DRAW_THICKNESS):
+    """
+    繪製牆壁線條並返回座標點
+    """
+    # 繪製天花板垂直線
+    cv2.line(img, ceiling_start, center, color, thickness)
+    # 繪製左牆壁
+    cv2.line(img, center, left_wall_end, color, thickness)
+    # 繪製右牆壁
+    cv2.line(img, center, right_wall_end, color, thickness)
+    return center, left_wall_end, right_wall_end
+   
+# 用於獲取牆壁線上的座標點
+def get_line_coordinates(start, end, list_pixels):
+
+    # 計算直線斜率 m
+    x1, y1 = start # 中心
+    x2, y2 = end  # 牆壁
+    m = (y2 - y1) / (x2 - x1)  # 斜率
+
+    # # 定義一個空的列表來存儲直線上的所有像素點
+    # line_pixels = []
+
+    # 判斷 x1 是否小於 x2，確保遍歷順序
+    if x1 > x2:
+        x1, x2 = x2, x1  # 確保 x1 <= x2
+        y1, y2 = y2, y1  # 同步交換 y1, y2
+
+    # 遍歷 x 值
+    for x in range(x1, x2 + 1):
+        # 計算對應的 y 值
+        y = int(m * (x - x1) + y1)
+        # 儲存像素座標
+        list_pixels.append((x, y))
+
+    # print(list_pixels)
+    return list_pixels
+
+    
 class DetectThread(threading.Thread):
 
-    def __init__(self, cam_id, cam, model, model_lock, device, save_dir, fps, names, half, imgsz):
+    def __init__(self, cam_id, cam, model, model_lock, device, base_dir, fps, names, half, imgsz):
         super().__init__(daemon=True)
 
         self.current_alert_state = False
@@ -40,7 +83,8 @@ class DetectThread(threading.Thread):
         self.model = model
         self.model_lock = model_lock
         self.device = device
-        self.save_dir = save_dir
+        self.base_dir = Path(base_dir)
+
         self.fps = fps
         self.names = names
         self.half = half
@@ -103,6 +147,22 @@ class DetectThread(threading.Thread):
 
                 im0 = img0.copy()
 
+                if self.wall_config:
+                    center, left_wall_line, right_wall_line = draw_wall_lines(
+                        im0, 
+                        self.wall_config['center'], 
+                        self.wall_config['ceiling'], 
+                        self.wall_config['left'], 
+                        self.wall_config['right']
+                    )
+                #     # 獲取牆壁線上的座標點 (如果需要)
+                #     # left_wall_points = get_line_coordinates(center, left_wall_line, self.L_list_walls)
+                #     # right_wall_points = get_line_coordinates(center, right_wall_line, self.R_list_walls)
+                ##################################################################################
+
+                # fps = calculate_fps(self.prev_time, self.frame_count)
+
+
                 if len(pred[0]):
                     det = pred[0]
                     scale_coords(img.shape[2:], det[:, :4], im0.shape, kpt_label=True)
@@ -138,13 +198,20 @@ class DetectThread(threading.Thread):
                                 print(f'[Cam{self.cam_id}] 觸發事件！開始錄影...')
                                 self.b_recording = True
                                 
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                filename_base = f'Event_Cam{self.cam_id}_{timestamp}'
+                                # 【修改 2】 動態生成當下的日期資料夾
+                                now = datetime.now()
+                                date_str = now.strftime("%Y/%m/%d")  # 例如 2025/12/29
+                                timestamp = now.strftime("%Y%m%d_%H%M%S")
 
-                                # ▼▼▼【修改重點】▼▼▼
+                                # 組合當日的完整路徑
+                                current_save_dir = self.base_dir / date_str
+                                if not current_save_dir.exists():
+                                    current_save_dir.mkdir(parents=True, exist_ok=True)
+                                    print(f"[系統] 跨日或新啟動，建立新資料夾: {current_save_dir}")
+
+                                filename_base = f'Event_Cam{self.cam_id}_{timestamp}'
                                 # 1. 最終檔名 (給 UI 看的)
                                 self.final_cam_path = self.save_dir / f'{filename_base}.mp4'
-                                
                                 # 2. 暫存檔名 (給 OpenCV 寫入用的，Server 會隱藏它)
                                 # 重點：必須保留 .mp4 結尾，OpenCV 才會錄製！
                                 self.temp_cam_path = str(self.save_dir / f'{filename_base}_TEMP.mp4')
@@ -246,3 +313,5 @@ class DetectThread(threading.Thread):
         if self.pose_estimator:
             self.pose_estimator.reset_memory()
         self.current_alert_state = False
+    
+    
