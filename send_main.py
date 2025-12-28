@@ -12,6 +12,7 @@ NX_SERVER_IP = "192.168.137.98"
 PORT = 5555  
 CAM_ID = 0 
 
+
 def main():
     context = zmq.Context()
     # 使用 PUB (發布者) 模式
