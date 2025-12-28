@@ -1,0 +1,248 @@
+import os
+import cv2
+import time
+import queue
+import torch
+import numpy as np
+import threading
+import traceback  # 新增：用來印出詳細錯誤
+from datetime import datetime
+from collections import deque
+
+from utils.general import check_img_size, non_max_suppression_kpt, scale_coords, set_logging, increment_path
+from utils.torch_utils import select_device, time_synchronized
+from utils.plots import colors, plot_one_box
+from utils.datasets import letterbox
+
+import pose_estimator
+
+CONF_THRESHOLD = 0.45
+IOU_THRESHOLD = 0.25
+DRAW_SCALE = 0.3
+DRAW_THICKNESS = 1
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GREEN = (0, 255, 0)
+
+STOP_EVENT = threading.Event()
+
+class DetectThread(threading.Thread):
+
+    def __init__(self, cam_id, cam, model, model_lock, device, save_dir, fps, names, half, imgsz):
+        super().__init__(daemon=True)
+
+        self.current_alert_state = False
+        self.stop_event = STOP_EVENT
+        self.shared_frame_queue = queue.Queue(maxsize=10)
+        self.cam_id = cam_id
+        
+        self.cam = cam
+        self.model = model
+        self.model_lock = model_lock
+        self.device = device
+        self.save_dir = save_dir
+        self.fps = fps
+        self.names = names
+        self.half = half
+        self.imgsz = imgsz
+
+        self.stride = int(model.stride.max())
+        
+        self.wall_config = None
+        if self.cam_id == 0:
+            self.wall_config = {'center': (90, 70), 'ceiling': (90, 0), 'left': (10, 120), 'right': (160, 110)}
+        elif self.cam_id == 1:
+            self.wall_config = {'center': (80, 70), 'ceiling': (80, 0), 'left': (10, 120), 'right': (160, 110)}
+        else:
+            self.wall_config = {'center': (105, 80), 'ceiling': (105, 0), 'left': (60, 120), 'right': (160, 90)}
+
+        self.pose_estimator = pose_estimator.PoseEstimator(cf_thres=1, cam_id=cam_id, wall_config=self.wall_config)
+        self.running = True
+        self.prev_time = None
+        self.fps_records = []
+        self.sys_fps = fps
+        self.frame_count = 0
+
+        self.pre_event_seconds = 10
+        self.post_event_seconds = 10
+        self.b_recording = False
+        self.event_start_time = 0 
+        self.eventWriter = None
+        
+        # 初始化路徑變數
+        self.final_cam_path = None
+        self.temp_cam_path = None
+
+        self.frame_buffer = deque(maxlen=int(self.sys_fps * self.pre_event_seconds))
+
+    def run(self):
+        # 加入全域 Try-Catch，防止執行緒無聲無息死亡
+        try:
+            while self.running:
+                if self.stop_event.is_set():
+                    break
+
+                frame = self.cam.read()
+                if frame is None:
+                    time.sleep(0.01)
+                    continue
+
+                self.prev_time = time.time()
+                img0 = frame.copy()
+                img = letterbox(img0, self.imgsz, stride=self.stride, auto=True)[0]
+                img = img[:, :, ::-1].transpose(2, 0, 1)
+                img = np.ascontiguousarray(img)
+                img = torch.from_numpy(img).to(self.device)
+                img = img.half() if self.half else img.float()
+                img /= 255.0
+                img = img.unsqueeze(0)
+
+                with self.model_lock:
+                    pred = self.model(img, augment=False)[0]
+                    pred = non_max_suppression_kpt(pred, conf_thres=CONF_THRESHOLD, iou_thres=IOU_THRESHOLD, classes=0, agnostic=False, kpt_label=True)
+
+                im0 = img0.copy()
+
+                if len(pred[0]):
+                    det = pred[0]
+                    scale_coords(img.shape[2:], det[:, :4], im0.shape, kpt_label=True)
+                    scale_coords(img.shape[2:], det[:, 6:], im0.shape, kpt_label=True, step=3)
+
+                    det = det[:1]
+                    for det_index, (*xyxy, conf, cls) in enumerate(reversed(det[:, :6])):
+                        c = int(cls)
+                        label = f'{self.names[c]} {conf:.2f}'
+                        kpts = det[det_index, 6:]
+                        kpts_list = [[round(kpts[j].item(), 2), round(kpts[j + 1].item(), 2), round(kpts[j + 2].item() * 2)] for j in range(0, len(kpts), 3)]
+
+                        # 呼叫 Pose Estimator
+                        _, R_vel, R_agl, avg_Ragl, L_vel, L_agl, avg_Lagl, hand_count, hand_alert_signal, near_ankle_state, leftAnkle_near_disL, rightAnkle_near_disL, leftAnkle_near_disR, rightAnkle_near_disR, nose_velocity, head_count, head_alert_signal, head_angle_change = self.pose_estimator.update_hand_info(kpts_list, self.frame_count)
+
+                        # 繪圖
+                        cv2.putText(im0, f"R Vel: {R_vel}", (10, 10), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
+                        cv2.putText(im0, f"L Vel: {L_vel}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
+                        cv2.putText(im0, f"Hand Count: {hand_count}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
+                        cv2.putText(im0, "Hand Self Harm" if hand_alert_signal else " ", (80, 20), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, GREEN, DRAW_THICKNESS, cv2.LINE_AA)
+
+                        plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=2, kpt_label=True, kpts=kpts, steps=3, orig_shape=im0.shape[:2])
+
+                        self.frame_buffer.append(im0.copy())
+
+                        self.current_alert_state = hand_alert_signal or head_alert_signal
+
+                        # ==================== 錄影邏輯 ====================
+                        if hand_alert_signal or head_alert_signal:
+                            self.event_start_time = time.time()
+
+                            if not self.b_recording:
+                                print(f'[Cam{self.cam_id}] 觸發事件！開始錄影...')
+                                self.b_recording = True
+                                
+                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                filename_base = f'Event_Cam{self.cam_id}_{timestamp}'
+
+                                # ▼▼▼【修改重點】▼▼▼
+                                # 1. 最終檔名 (給 UI 看的)
+                                self.final_cam_path = self.save_dir / f'{filename_base}.mp4'
+                                
+                                # 2. 暫存檔名 (給 OpenCV 寫入用的，Server 會隱藏它)
+                                # 重點：必須保留 .mp4 結尾，OpenCV 才會錄製！
+                                self.temp_cam_path = str(self.save_dir / f'{filename_base}_TEMP.mp4')
+                                
+                                # self.temp_cam_path = str(self.final_cam_path) + ".temp"
+
+                                h, w = im0.shape[:2]
+                                record_fps = self.sys_fps if self.sys_fps > 0 else 10
+                                # record_fps = int(max(self.sys_fps, 10))
+
+                                print(f"[Cam{self.cam_id}] 建立錄影檔: {self.temp_cam_path} (FPS: {record_fps})")
+
+                                # 確保路徑資料夾存在
+                                if not os.path.exists(os.path.dirname(self.temp_cam_path)):
+                                    print(f"警告：資料夾不存在，嘗試建立：{os.path.dirname(self.temp_cam_path)}")
+                                    os.makedirs(os.path.dirname(self.temp_cam_path), exist_ok=True)
+
+                                self.eventWriter = cv2.VideoWriter(self.temp_cam_path, cv2.VideoWriter_fourcc(*'mp4v'), record_fps, (w, h))
+                                
+                                # 寫入緩衝區影像
+                                history_frames = list(self.frame_buffer)
+                                for hist_frame in history_frames:
+                                    if hist_frame is not None:
+                                        self.eventWriter.write(hist_frame)
+
+                        if self.b_recording and self.eventWriter is not None:
+                            self.eventWriter.write(im0)
+
+                            if (time.time() - self.event_start_time) > self.post_event_seconds: 
+                                print(f"[Cam{self.cam_id}] 事件結束，停止錄影。")
+                                self.stop_recording_and_save() # 呼叫存檔函式
+
+                # 計算 FPS
+                elapsed_time = time.time() - self.prev_time
+                self.sys_fps = 1 / elapsed_time if elapsed_time > 0 else 0
+                self.fps_records.append(self.sys_fps)
+
+                if len(self.fps_records) == 50:
+                    self.sys_fps = round(sum(self.fps_records) / len(self.fps_records))
+
+                    safe_fps = min(self.sys_fps, 15) 
+
+                    new_buffer_len = int(safe_fps * self.pre_event_seconds)
+
+                    if new_buffer_len != self.frame_buffer.maxlen:
+                        self.frame_buffer = deque(self.frame_buffer, maxlen=new_buffer_len)
+
+                    self.pose_estimator.update_fps(self.sys_fps)
+                   
+                cv2.putText(im0, f'FPS: {round(self.sys_fps, 1)}', (10, 100), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
+
+                # 推送影像
+                if self.shared_frame_queue.full():
+                    try: self.shared_frame_queue.get_nowait()
+                    except queue.Empty: pass
+                # self.shared_frame_queue.put(im0)
+                self.shared_frame_queue.put((im0, self.current_alert_state))
+                self.frame_count += 1
+        
+        except Exception as e:
+            # 這是重點：如果發生錯誤，印出來，不要只卡住畫面
+            print(f"!!! Cam{self.cam_id} DetectThread 發生嚴重錯誤 !!!")
+            traceback.print_exc()
+        
+        finally:
+            # 確保執行緒結束時（無論是正常停止還是崩潰），影片都能被儲存
+            print(f"Cam{self.cam_id} 執行緒結束，執行清理...")
+            self.stop_recording_and_save()
+
+    # ==========================================
+    # 獨立出來的存檔函式
+    # ==========================================
+    def stop_recording_and_save(self):
+        self.b_recording = False
+        if self.eventWriter is not None:
+            self.eventWriter.release()
+            self.eventWriter = None
+            print(f"[Cam{self.cam_id}] 錄影結束，準備更名...") # Debug 訊息
+            # 嘗試將 .temp 改名為 .mp4
+            try:
+                if self.temp_cam_path and os.path.exists(self.temp_cam_path):
+
+                    if os.path.exists(self.final_cam_path):
+                        os.remove(self.final_cam_path)
+
+                    os.rename(self.temp_cam_path, str(self.final_cam_path))
+                    print(f"影片救援成功/已儲存: {self.final_cam_path}")
+                else:
+                    print(f"錯誤：找不到暫存檔 {self.temp_cam_path}")
+            except Exception as e:
+                print(f"影片存檔失敗: {e}")
+
+    # ==========================================
+    # 重置 AI 狀態
+    # ==========================================
+    def reset_state(self):
+        print(f"Cam{self.cam_id} 正在重置 AI 狀態...")
+        self.frame_buffer.clear()
+        if self.pose_estimator:
+            self.pose_estimator.reset_memory()
+        self.current_alert_state = False
