@@ -92,6 +92,38 @@ class DetectThread(threading.Thread):
 
         self.stride = int(model.stride.max())
         
+        # ==================== [新增] 校正與裁切參數設定 ====================
+        self.enable_calibration = False
+        self.calib_file = f'calibration_thermal_11.npz'  # 請確認路徑是否正確，或依 cam_id區分
+        
+        # 定義裁切範圍 (依照你的 cutBlack_resize.py 設定)
+        # 格式: (x_start, x_end, y_start, y_end)
+        self.crop_coords = (50, 550, 50, 420) 
+        # 統一標準解析度
+        self.standard_size = (640, 480)
+
+        if os.path.exists(self.calib_file):
+            try:
+                # 1. 載入校正檔
+                with np.load(self.calib_file) as X:
+                    self.mtx = X['mtx']
+                    self.dist = X['dist']
+                
+                # 建立映射表 (針對 640x480 的輸入)
+                # 因為我們會先強制 Resize 成 640x480 才進來校正，所以這裡大小鎖定 (640, 480)
+                self.mapx, self.mapy = cv2.initUndistortRectifyMap(
+                    self.mtx, self.dist, None, self.mtx, self.standard_size, cv2.CV_32FC1)
+                self.enable_calibration = True
+                print(f"[Cam{self.cam_id}] 校正模組啟用: 手動裁切範圍 {self.crop_coords}")
+
+            except Exception as e:
+                print(f"[Cam{self.cam_id}] 警告: 校正檔載入失敗，將使用原始影像推論。錯誤: {e}")
+        else:
+            print(f"警告：找不到 {self.calib_file}，將跳過校正步驟。")
+
+        # ================================================================
+
+
         self.wall_config = None
         if self.cam_id == 0:
             self.wall_config = {'center': (90, 70), 'ceiling': (90, 0), 'left': (10, 120), 'right': (160, 110)}
@@ -130,6 +162,20 @@ class DetectThread(threading.Thread):
                 if frame is None:
                     time.sleep(0.01)
                     continue
+                
+                # ==================== [新增] 校正 -> 裁切 -> 縮放 pipeline ====================
+                if self.enable_calibration:
+                    # 1. 校正 (Undistort)
+                    # 使用 remap 比 undistort 快，因為 map 是預先算好的
+                    frame_undist = cv2.remap(cv2.resize(frame, self.standard_size), self.mapx, self.mapy, cv2.INTER_LINEAR)
+                    # 2. 裁切 (Crop) - 使用 numpy slicing
+                    # Python Slice 語法是 [y_start : y_end, x_start : x_end]
+                    x_s, x_e, y_s, y_e = self.crop_coords
+                    frame_cropped = frame_undist[y_s:y_e, x_s:x_e]
+
+                    # 3. 縮放 (Resize) - 回復到 640x480
+                    frame = cv2.resize(frame_cropped, self.standard_size, interpolation=cv2.INTER_LINEAR)
+                # ============================================================================
 
                 self.prev_time = time.time()
                 img0 = frame.copy()
@@ -148,12 +194,27 @@ class DetectThread(threading.Thread):
                 im0 = img0.copy()
 
                 if self.wall_config:
+
+                    # 假設原始解析度是160x120，新的解析度是640x480
+                    original_width, original_height = 160, 120  # 原始解析度 (可以根據你的需求調整)
+                    new_width, new_height = self.standard_size  # 目標解析度 (來自目標大小，640x480)
+
+                    # 計算縮放比例
+                    scale_x = new_width / original_width
+                    scale_y = new_height / original_height
+
+                    # 縮放牆壁線座標
+                    center_rescaled = (int(self.wall_config['center'][0] * scale_x), int(self.wall_config['center'][1] * scale_y))
+                    ceiling_rescaled = (int(self.wall_config['ceiling'][0] * scale_x), int(self.wall_config['ceiling'][1] * scale_y))
+                    left_rescaled = (int(self.wall_config['left'][0] * scale_x), int(self.wall_config['left'][1] * scale_y))
+                    right_rescaled = (int(self.wall_config['right'][0] * scale_x), int(self.wall_config['right'][1] * scale_y))
+
                     center, left_wall_line, right_wall_line = draw_wall_lines(
                         im0, 
-                        self.wall_config['center'], 
-                        self.wall_config['ceiling'], 
-                        self.wall_config['left'], 
-                        self.wall_config['right']
+                        center_rescaled, 
+                        ceiling_rescaled, 
+                        left_rescaled, 
+                        right_rescaled
                     )
                 #     # 獲取牆壁線上的座標點 (如果需要)
                 #     # left_wall_points = get_line_coordinates(center, left_wall_line, self.L_list_walls)

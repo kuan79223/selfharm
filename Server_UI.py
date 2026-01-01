@@ -67,7 +67,7 @@ class BackendSystem:
                              self.device.type != 'cpu', imgsz=640)
             t.start()
             self.threads.append(t)
-
+    
     def get_frame(self, cam_id):
         if cam_id < len(self.threads):
             q = self.threads[cam_id].shared_frame_queue
