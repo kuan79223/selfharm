@@ -11,7 +11,7 @@ import os
 # 預設設定 (當 config.json 讀取失敗時使用)
 # ==========================================
 DEFAULT_CONFIG = {
-    "nx_server_ip": "192.168.137.98", #
+    "nx_server_ip": "192.168.50.192", #
     "port": 5555,                     #
     "cam_id": 0,                      #
     "retry_interval": 5,
