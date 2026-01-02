@@ -1,3 +1,4 @@
+from collections import deque
 import math
 import time
 from queue import Queue
@@ -49,7 +50,8 @@ class PoseEstimator(object):
         self.frame_queue = None
         # self.frame_queue = Queue(maxsize=self.queue_size)
         # *********************
-        self.threshold_distance = 50  # 手腕位移速度門檻值  ****** 用兩顆鏡頭 FPS 會被減半，門檻值也減半ㄆ
+        self.threshold_distance = 450  # 手腕位移速度門檻值  ****** 用兩顆鏡頭 FPS 會被減半，門檻值也減半ㄆ
+        
         self.thres_count = None
         self.thre_velocity = 0
         self.ratio_fps = 0
@@ -120,7 +122,7 @@ class PoseEstimator(object):
 
         #######################################
         self.csv_head = f'head_log{cam_id}.csv'
-        self.head_thre_dist = 25  # 頭部位移速度的門檻值
+        self.head_thre_dist = 50  # 頭部位移速度的門檻值
 
         self.nose = None
         self.nose_distance = 0  # 鼻子移動距離
@@ -157,6 +159,7 @@ class PoseEstimator(object):
             self.thres_count = round(self.queue_size * 0.5)  # 以序列長度的一半作為門檻值
             print(f'定義門檻次數{self.thres_count}')
             self.thre_velocity = round(self.threshold_distance * self.ratio_fps)  # 50 * 1
+            print(f'位移速度比例換算: {self.thre_velocity}')
 
     def update_hand_info(self, kpts_list, frame_count):
 
@@ -165,7 +168,7 @@ class PoseEstimator(object):
         self.current_timestamp = time.time()
         #########################################
         # 可以 Loss 掉兩個低於門檻值的關節點
-        if len(valid_kpts) >= 17:
+        if len(valid_kpts) >= 15:
 
             self.near_ankle_state = False
             ######### 計算腳踝 ##################################################################################################################
