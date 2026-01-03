@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QTreeView, QPushButton, QSizePolicy, QFileDialog,
     QTextEdit, QMenu, QAbstractItemView, QHeaderView
 )
-from PyQt6.QtGui import QImage, QPixmap, QAction, QFileSystemModel, QColor, QTextCursor
+from PyQt6.QtGui import QImage, QPixmap, QAction, QFileSystemModel, QColor, QTextCursor, QFont
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, QDir
 
 # 引入後端模組
@@ -26,6 +26,7 @@ from models.experimental import attempt_load
 from utils.torch_utils import select_device
 import globals as gl
 
+
 # ==========================================
 # 後端核心
 # ==========================================
@@ -34,7 +35,7 @@ class BackendSystem:
         self.BASE_VIDEO_DIR = "/home/aiot/Project"
         
         # 1. 初始化 YOLO
-        print("正在載入 YOLO 模型...")
+        print("正在載入 Thermal 模型...")
         self.device = select_device('0')
         self.model = attempt_load('thermalModel_v4_100epoch.pt', map_location=self.device)
         if self.device.type != 'cpu':
@@ -145,6 +146,23 @@ class StandaloneWindow(QWidget):
         layout_cams.addStretch() 
         layout_cams.setSpacing(20)
 
+        # --- A. 左下角元件：時鐘 (QLabel) ---
+        self.label_clock = QLabel("00:00:00")
+        self.label_clock.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # 設定字型：Arial, 大小 28, 粗體
+        font = QFont("Arial", 28, QFont.Weight.Bold)
+        self.label_clock.setFont(font)
+        # 設定外觀：綠字、深灰底、圓角邊框
+        self.label_clock.setStyleSheet("""
+            QLabel {
+                color: #2ecc71; 
+                background-color: #2c3e50;
+                padding: 10px;
+                border-radius: 10px;
+                border: 2px solid #555;
+            }
+        """)
+
         # --- B. 控制區 ---
         self.btn_alert = QPushButton("自傷行為\n(監控中)")
         self.btn_alert.setFixedSize(200, 200)
@@ -188,8 +206,14 @@ class StandaloneWindow(QWidget):
         self.log_area.setPlaceholderText("系統啟動... 等待事件觸發...")
         self.log_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
+        # 建立一個垂直 Layout 放按鈕跟時鐘
+        vbox_btn_clock = QVBoxLayout()
+        vbox_btn_clock.addWidget(self.label_clock) # 時鐘在上面
+        vbox_btn_clock.addWidget(self.btn_alert)   # 按鈕在下面
+        vbox_btn_clock.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         layout_controls = QHBoxLayout()
-        layout_controls.addWidget(self.btn_alert)
+        layout_controls.addLayout(vbox_btn_clock)
         layout_controls.addWidget(self.log_area)
         
         layout_left_panel = QVBoxLayout()
@@ -296,6 +320,11 @@ class StandaloneWindow(QWidget):
         self.schedule_midnight_update()
 
     def update_frames(self):
+
+        # 1. 更新時間
+        current_time_str = datetime.now().strftime("%H:%M:%S")
+        self.label_clock.setText(current_time_str)
+
         alert_triggered = False
         data0 = self.backend.get_frame(0)
         if data0:
