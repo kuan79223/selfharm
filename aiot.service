@@ -1,0 +1,18 @@
+[Unit]
+Description=AIOT Camera Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=raspberrypi
+# 注意：這裡要換成您上一輪查到的 conda python 路徑
+ExecStart=/home/raspberrypi/miniforge3/envs/rpi3912/bin/python /home/raspberrypi/project/send_main_v2.py
+WorkingDirectory=/home/raspberrypi/project
+# 注意：這裡也要換成 conda bin 路徑
+Environment="PATH=/home/raspberrypi/miniforge3/envs/rpi3912/bin:/usr/local/bin:/usr/bin:/bin"
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
