@@ -317,7 +317,7 @@ class DetectThread(threading.Thread):
                             self.event_start_time = time.time()
 
                             if not self.b_recording:
-                                print(f'[Cam{self.cam_id}] 觸發事件！開始錄影...')
+                                # print(f'[Cam{self.cam_id}] 觸發事件！開始錄影...')
                                 self.b_recording = True
                                 
                                 # 【修改 2】 動態生成當下的日期資料夾
@@ -342,7 +342,7 @@ class DetectThread(threading.Thread):
                                 record_fps = self.sys_fps if self.sys_fps > 0 else 10
                                 # record_fps = int(max(self.sys_fps, 10))
 
-                                print(f"[Cam{self.cam_id}] 建立錄影檔: {self.temp_cam_path} (FPS: {record_fps})")
+                                # print(f"[Cam{self.cam_id}] 建立錄影檔: {self.temp_cam_path} (FPS: {record_fps})")
 
                                 # 確保路徑資料夾存在
                                 if not os.path.exists(os.path.dirname(self.temp_cam_path)):
@@ -361,7 +361,7 @@ class DetectThread(threading.Thread):
                             self.eventWriter.write(im0)
 
                             if (time.time() - self.event_start_time) > self.post_event_seconds: 
-                                print(f"[Cam{self.cam_id}] 事件結束，停止錄影。")
+                                # print(f"[Cam{self.cam_id}] 事件結束，停止錄影。")
                                 self.stop_recording_and_save() # 呼叫存檔函式
 
                 
@@ -380,7 +380,7 @@ class DetectThread(threading.Thread):
         
         finally:
             # 確保執行緒結束時（無論是正常停止還是崩潰），影片都能被儲存
-            print(f"Cam{self.cam_id} 執行緒結束，執行清理...")
+            # print(f"Cam{self.cam_id} 影片儲存執行緒結束，執行清理...")
             self.stop_recording_and_save()
 
     # ==========================================
@@ -391,7 +391,7 @@ class DetectThread(threading.Thread):
         if self.eventWriter is not None:
             self.eventWriter.release()
             self.eventWriter = None
-            print(f"[Cam{self.cam_id}] 錄影結束，準備更名...") # Debug 訊息
+            # print(f"[Cam{self.cam_id}] 錄影結束，準備更名...") # Debug 訊息
             # 嘗試將 .temp 改名為 .mp4
             try:
                 if self.temp_cam_path and os.path.exists(self.temp_cam_path):

@@ -98,7 +98,7 @@ class PoseEstimator(object):
         self.rightAnkleToRightWallDist = 0.0
         #######################################
         self.csv_head = f'head_log{cam_id}.csv'
-        self.head_thre_dist = 200  # 頭部位移速度的門檻值 50
+        self.head_thre_dist = 150  # 頭部位移速度的門檻值 50
 
         self.nose = None
         self.nose_distance = 0  # 鼻子移動距離
@@ -413,19 +413,19 @@ class PoseEstimator(object):
                         self.hand_shift_count,
                         self.hand_harm_alert_sent])
                 
-            # # 記錄到 CSV 腳踝與牆壁距離與鼻子位移速度
-            # with open(self.csv_head, mode='a', newline='') as file:
-            #     writer = csv.writer(file)
-            #     writer.writerow([frame_count, 
-            #         round(self.leftAnkleToLeftWallDist), 
-            #         round(self.rightAnkleToLeftWallDist), 
-            #         round(self.leftAnkleToRightWallDist), 
-            #         round(self.rightAnkleToRightWallDist), 
-            #         self.near_ankle_state, 
-            #         self.nose_velocity, 
-            #         self.head_shift_count, 
-            #         self.head_trigger_event, 
-            #         self.head_harm_alert_sent])
+                # 記錄到 CSV 腳踝與牆壁距離與鼻子位移速度
+                with open(self.csv_head, mode='a', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow([frame_count, 
+                        round(self.leftAnkleToLeftWallDist), 
+                        round(self.rightAnkleToLeftWallDist), 
+                        round(self.leftAnkleToRightWallDist), 
+                        round(self.rightAnkleToRightWallDist), 
+                        self.near_ankle_state, 
+                        self.nose_velocity, 
+                        self.head_shift_count, 
+                        self.head_trigger_event, 
+                        self.head_harm_alert_sent])
         # 返回 18
         return (frame_count, round(self.right_velocity), self.right_elbow_angle, self.right_avg_angle,
                 round(self.left_velocity), self.left_elbow_angle, self.left_avg_angle,

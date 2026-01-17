@@ -37,7 +37,7 @@ axes[0].set_xlabel('Frame')
 axes[0].legend(loc='upper right')
 axes[0].grid(True)
 axes[0].set_xticks(x_ticks)  # 設定 X 軸刻度
-axes[0].axhline(y=15, color='red', linestyle='--')
+axes[0].axhline(y=60, color='red', linestyle='--')
 # 取得 y 軸當前範圍
 y_min, y_max = axes[0].get_ylim()
 axes[0].set_yticks(np.arange(0, y_max + 45, 50))
@@ -50,7 +50,7 @@ axes[1].set_xlabel('Frame')
 axes[1].legend(loc='upper right')
 axes[1].grid(True)
 axes[1].set_xticks(x_ticks)  # 設定 X 軸刻度
-axes[1].axhline(y=15, color='red', linestyle='--')
+axes[1].axhline(y=60, color='red', linestyle='--')
 axes[1].set_yticks(np.arange(0, y_max + 45, 50))
 
 # 左腳踝接近右邊牆壁的距離 (LR_Dist)
@@ -60,7 +60,7 @@ axes[2].set_xlabel('Frame')
 axes[2].legend(loc='upper right')
 axes[2].grid(True)
 axes[2].set_xticks(x_ticks)  # 設定 X 軸刻度
-axes[2].axhline(y=15, color='red', linestyle='--')
+axes[2].axhline(y=60, color='red', linestyle='--')
 # 取得 y 軸當前範圍
 # y_min, y_max = axes[2].get_ylim()
 axes[2].set_yticks(np.arange(0, y_max + 45, 50))
@@ -73,7 +73,7 @@ axes[3].set_xlabel('Frame')
 axes[3].legend(loc='upper right')
 axes[3].grid(True)
 axes[3].set_xticks(x_ticks)  # 設定 X 軸刻度
-axes[3].axhline(y=15, color='red', linestyle='--')
+axes[3].axhline(y=60, color='red', linestyle='--')
 axes[3].set_yticks(np.arange(0, y_max + 45, 50))
 # **設定 Y 軸刻度 (0~200，每 50 一格)**
 # axes[1].set_yticks(range(0, 201, 50))
@@ -98,7 +98,7 @@ axes[5].set_xlabel('Frame')
 axes[5].legend(loc='upper right')
 axes[5].grid(True)
 axes[5].set_xticks(x_ticks)  # 設定 X 軸刻度
-axes[5].axhline(y=25, color='red', linestyle='--') # 即時檢測 20
+axes[5].axhline(y=200, color='red', linestyle='--') # 即時檢測 20
 # 取得 y 軸當前範圍
 y_min, y_max = axes[3].get_ylim()
 axes[5].set_yticks(np.arange(0, y_max + 10, 50))  
