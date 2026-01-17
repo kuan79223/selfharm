@@ -286,27 +286,32 @@ class DetectThread(threading.Thread):
                         # 調整文字顯示的位置，因為影像被裁切放大，需要調整
                         cv2.putText(im0, f"R Vel: {R_vel}", (int(10 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
                         cv2.putText(im0, f"L Vel: {L_vel}", (int(10 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, f'Cam: {self.cam_id}', (int(80 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
                         cv2.putText(im0, f"Hand Count: {hand_count}", (int(10 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, "Hand Self Harm" if hand_alert_signal else " ", (int(80 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, "near wall" if near_ankle_state else " ", (int(100 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness * 2, cv2.LINE_AA)
+                        cv2.putText(im0, "Hand Self Harm" if hand_alert_signal else " ", (int(80 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness* 2, cv2.LINE_AA)
+                        cv2.putText(im0, "near wall" if near_ankle_state else " ", (int(80 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness * 2, cv2.LINE_AA)
                         cv2.putText(im0, f"Head Vel: {nose_velocity}", (int(10 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
                         cv2.putText(im0, f"Head Count: {head_count}", (int(10 * self.scale_x), int(50 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, "Head Self Harm" if head_alert_signal else " ", (int(120 * self.scale_x), int(60 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness, cv2.LINE_AA)
-
-                        # 繪圖
-                        # cv2.putText(im0, f"R Vel: {R_vel}", (10, 10), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
-                        # cv2.putText(im0, f"L Vel: {L_vel}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
-                        # cv2.putText(im0, f"Hand Count: {hand_count}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
-                        # cv2.putText(im0, "Hand Self Harm" if hand_alert_signal else " ", (80, 20), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, GREEN, DRAW_THICKNESS, cv2.LINE_AA)
-                        # cv2.putText(im0, f"Head Vel: {nose_velocity}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
-                        # cv2.putText(im0, f"Head Count: {head_count}", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, WHITE, DRAW_THICKNESS, cv2.LINE_AA)
-                        # cv2.putText(im0, "Head Self Harm" if head_alert_signal else " ", (120, 60), cv2.FONT_HERSHEY_SIMPLEX, DRAW_SCALE, GREEN, DRAW_THICKNESS, cv2.LINE_AA)
+                        cv2.putText(im0, "Head Self Harm" if head_alert_signal else " ", (int(80 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness* 2, cv2.LINE_AA)
+        
                         plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=2, kpt_label=True, kpts=kpts, steps=3, orig_shape=im0.shape[:2])
 
                         self.frame_buffer.append(im0.copy())
-
-                        self.current_alert_state = hand_alert_signal or head_alert_signal
-
+                        # self.current_alert_state = hand_alert_signal or head_alert_signal
+                        # 在UI上細分自傷狀態
+                        alert_types = []
+                        if hand_alert_signal:
+                            alert_types.append("發生手部自傷行為")
+                            # print("DEBUG: 偵測到手部異常！")  # <--- 建議打開註解測試
+                        elif head_alert_signal:
+                            alert_types.append("發生頭部自傷行為")
+                            # print("DEBUG: 偵測到頭部異常！")  # <--- 建議打開註解測試
+                        
+                        # 如果有任何警報，組合成字串 (例如 "手部" 或 "手部 & 頭部")；否則為 None
+                        if len(alert_types) > 0:
+                            self.current_alert_state = " & ".join(alert_types)
+                        else:
+                            self.current_alert_state = None
                         # ==================== 錄影邏輯 ====================
                         if hand_alert_signal or head_alert_signal:
                             self.event_start_time = time.time()
@@ -395,7 +400,7 @@ class DetectThread(threading.Thread):
                         os.remove(self.final_cam_path)
 
                     os.rename(self.temp_cam_path, str(self.final_cam_path))
-                    print(f"影片救援成功/已儲存: {self.final_cam_path}")
+                    # print(f"影片救援成功/已儲存: {self.final_cam_path}")
                 else:
                     print(f"錯誤：找不到暫存檔 {self.temp_cam_path}")
             except Exception as e:
@@ -405,7 +410,7 @@ class DetectThread(threading.Thread):
     # 重置 AI 狀態
     # ==========================================
     def reset_state(self):
-        print(f"Cam{self.cam_id} 正在重置 AI 狀態...")
+        # print(f"Cam{self.cam_id} 正在重置 AI 狀態...")
         self.frame_buffer.clear()
         if self.pose_estimator:
             self.pose_estimator.reset_memory()

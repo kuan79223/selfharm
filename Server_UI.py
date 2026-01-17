@@ -8,6 +8,7 @@ import torch
 import numpy as np
 from datetime import date, datetime, timedelta  # 【新增】timedelta 用於計算午夜時間差
 from pathlib import Path
+import traceback
 
 # PyQt6 UI 模組
 from PyQt6.QtWidgets import (
@@ -27,27 +28,127 @@ from utils.torch_utils import select_device
 import globals as gl
 
 
+def get_executable_dir():
+    """
+    取得程式執行的真實目錄。
+    支援: 一般 Python 執行、PyInstaller 打包後的 exe/bin
+    """
+    if getattr(sys, 'frozen', False):
+        # 如果是打包後的執行檔
+        return os.path.dirname(sys.executable)
+    else:
+        # 如果是原始 Python script
+        return os.path.dirname(os.path.abspath(__file__))
+    
+# ==========================================
+# 日誌系統 (Log System)
+# ==========================================
+class SystemLogger:
+    def __init__(self, log_folder_name="Log"):
+
+        # 【修改】使用絕對路徑，確保 Log 資料夾生成在 exe 旁邊
+        base_dir = get_executable_dir()
+        self.log_dir = os.path.join(base_dir, log_folder_name)
+
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+        
+        # 啟動時檢查是否需要清理舊 Log
+        self.cleanup_old_logs()
+        self.log("系統啟動 (System Startup)")
+
+    def get_log_file_path(self):
+        """ 取得當天的 Log 檔案路徑 (每天一份) """
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        return os.path.join(self.log_dir, f"{today_str}.txt")
+
+    def log(self, message, is_error=False):
+        """ 寫入訊息到 Log 檔 """
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            level = "ERROR" if is_error else "INFO"
+            log_content = f"[{timestamp}] [{level}] {message}\n"
+            
+            # 寫入檔案 (Append 模式)
+            with open(self.get_log_file_path(), "a", encoding="utf-8") as f:
+                f.write(log_content)
+                
+            # 如果是嚴重錯誤，也印在終端機
+            if is_error:
+                print(log_content)
+        except Exception as e:
+            print(f"寫入 Log 失敗: {e}")
+
+    def cleanup_old_logs(self):
+        """ 檢查 Log 檔案數量，若超過 365 天則全部刪除 """
+        try:
+            files = [os.path.join(self.log_dir, f) for f in os.listdir(self.log_dir) if f.endswith(".txt")]
+            
+            if len(files) > 365:
+                print(f"[Log系統] Log 檔案數量 ({len(files)}) 超過 365，執行清理...")
+                self.log(f"Log 檔案過多，執行全數清理。")
+                
+                for f in files:
+                    try:
+                        os.remove(f)
+                    except Exception as e:
+                        print(f"刪除 {f} 失敗: {e}")
+                
+                # 清理完後重新記錄一筆
+                self.log("Log 檔案已重置 (Reset logs after 365 days limit).")
+        except Exception as e:
+            print(f"Log 清理檢查失敗: {e}")
+
+# 初始化全域 Logger
+sys_logger = SystemLogger()
+
+# 捕捉全域未處理異常 (Global Exception Hook)
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    print("!!! 系統發生未預期崩潰 !!!", error_msg)
+    
+    # 寫入 Log
+    sys_logger.log(f"系統崩潰 (Uncaught Exception):\n{error_msg}", is_error=True)
+    
+    # 呼叫原始的例外處理 (通常會結束程式)
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+# 將 Hook 掛載到系統
+sys.excepthook = handle_exception
+
 # ==========================================
 # 後端核心
 # ==========================================
 class BackendSystem:
     def __init__(self):
-        self.BASE_VIDEO_DIR = "/home/aiot/Project"
+        # 【修改】使用絕對路徑，確保 Project 資料夾生成在 exe 旁邊
+        exe_dir = get_executable_dir()
+        self.BASE_VIDEO_DIR = os.path.join(exe_dir, "Project")
         
         # 1. 初始化 YOLO
         print("正在載入 Thermal 模型...")
-        self.device = select_device('0')
-        self.model = attempt_load('thermalModel_v4_100epoch.pt', map_location=self.device)
-        if self.device.type != 'cpu':
-            self.model.half()
-        self.model(torch.zeros(1, 3, 640, 640).to(self.device).type_as(next(self.model.parameters())))
-        self.model_lock = threading.Lock()
-
-        # 2. 設定網路相機
-        CAM0_PORT = 5555
-        CAM1_PORT = 5556
-        print(f"啟動 ZMQ 接收: Port {CAM0_PORT}, {CAM1_PORT}")
+        try:
+            self.device = select_device('0')
+            self.model = attempt_load('thermalModel_v4_100epoch.pt', map_location=self.device)
+            if self.device.type != 'cpu':
+                self.model.half()
+            self.model(torch.zeros(1, 3, 640, 640).to(self.device).type_as(next(self.model.parameters())))
+            self.model_lock = threading.Lock()
+            sys_logger.log("Thermal 模型載入成功")
+        except Exception as e:
+            sys_logger.log(f"Thermal 模型載入失敗: {e}", is_error=True)
+            raise e
         
+        # 2. 設定網路相機
+        CAM0_PORT = 8000
+        CAM1_PORT = 8001
+        # print(f"啟動 ZMQ 接收: Port {CAM0_PORT}, {CAM1_PORT}")
+        sys_logger.log(f"啟動相機接收 Port: {CAM0_PORT}, {CAM1_PORT}")
+
         self.cams = []
         self.cams.append(CameraThread(port=CAM0_PORT, name='Cam0', rotate=True))
         self.cams.append(CameraThread(port=CAM1_PORT, name='Cam1', rotate=True))
@@ -77,13 +178,15 @@ class BackendSystem:
         return None
 
     def reset_alert(self):
+        sys_logger.log("執行後端警報重置 (Reset Alert)")
         gl.alarm_state = False
         for t in self.threads:
             if hasattr(t, 'reset_state'):
                 t.reset_state()
 
     def stop(self):
-        print("--- 正在關閉系統 ---")
+        # print("--- 正在關閉系統 ---")
+        sys_logger.log("系統正在關閉 (Backend Stopping)...")
         try:
             import detect_thread
             detect_thread.STOP_EVENT.set()
@@ -94,7 +197,8 @@ class BackendSystem:
             if hasattr(cam, 'stop'): cam.stop()
         for t in self.threads:
             t.join(timeout=0.5)
-        print("--- 系統已安全中止 ---")
+        # print("--- 系統已安全中止 ---")
+        sys_logger.log("系統已安全中止 (Shutdown Complete)")
 
 # ==========================================
 # 前端 UI
@@ -303,7 +407,8 @@ class StandaloneWindow(QWidget):
         now_str = datetime.now().strftime("%Y/%m/%d")
         
         if now_str != self.current_date_str:
-            print(f"[UI] 執行跨日更新！ {self.current_date_str} -> {now_str}")
+            # print(f"[UI] 執行跨日更新！ {self.current_date_str} -> {now_str}")
+            sys_logger.log(f"跨日更新: {self.current_date_str} -> {now_str}")
             self.current_date_str = now_str
             
             # 更新介面
@@ -324,23 +429,28 @@ class StandaloneWindow(QWidget):
         # 1. 更新時間
         current_time_str = datetime.now().strftime("%H:%M:%S")
         self.label_clock.setText(current_time_str)
-
-        alert_triggered = False
+        
+        # 【修改】用變數來接收警報類型 (字串)
+        detected_alert_msg = None
         data0 = self.backend.get_frame(0)
         if data0:
-            frame, is_alert = data0
+            frame, alert_state = data0 # 這裡的 alert_state 變成了字串 (如 "手部") 或 None
             self.show_frame(self.label_cam0, frame)
-            if is_alert: alert_triggered = True
+            if alert_state:
+                detected_alert_msg = alert_state # 記錄警報類型
 
         data1 = self.backend.get_frame(1)
         if data1:
-            frame, is_alert = data1
+            frame, alert_state = data1
             self.show_frame(self.label_cam1, frame)
-            if is_alert: alert_triggered = True
+            if alert_state: 
+                # 如果兩機同時觸發，可以用字串串接，或直接覆蓋 (這裡示範覆蓋)
+                detected_alert_msg = alert_state
             
-        if alert_triggered and not self.ui_alert_active:
-            self.trigger_alert_ui()
+        if detected_alert_msg and not self.ui_alert_active:
+            self.trigger_alert_ui(detected_alert_msg) # <--- 傳入類型字串
 
+        
     def show_frame(self, label, frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
@@ -348,20 +458,25 @@ class StandaloneWindow(QWidget):
         qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         label.setPixmap(QPixmap.fromImage(qimg))
 
-    def trigger_alert_ui(self):
+    def trigger_alert_ui(self, alert_type=''):
         self.ui_alert_active = True
         self.btn_alert.setText("⚠️ 異常發生 ⚠️\n點擊重置")
         self.btn_alert.setStyleSheet(self.style_alert)
-        
         # 【修改 3】 警報發生時，啟用按鈕讓使用者可以點擊
         self.btn_alert.setEnabled(True)
         
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.log_area.append(f"[{timestamp}] 偵測到自傷行為！")
+        
+        # 【修改】Log 訊息顯示具體類型
+        log_msg = f"[{timestamp}] 偵測到【{alert_type}】自傷行為！"
+        self.log_area.append(log_msg)
         self.log_area.moveCursor(QTextCursor.MoveOperation.End)
+        # 寫入系統 Log
+        sys_logger.log("偵測到自傷行為！")
 
     def reset_alert_state(self):
-        print("使用者手動重置警報...")
+        # print("使用者手動重置警報...")
+        sys_logger.log("使用者手動重置警報")
         self.backend.reset_alert()
         self.ui_alert_active = False
         self.btn_alert.setText("自傷行為\n(監控中)")
@@ -372,7 +487,7 @@ class StandaloneWindow(QWidget):
         
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_area.append(f"[{timestamp}] 警報已手動解除。")
-
+        
     def open_context_menu(self, position):
         indexes = self.file_tree.selectedIndexes()
         if len(indexes) > 0:
@@ -433,8 +548,16 @@ class StandaloneWindow(QWidget):
         self.backend.stop()
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    backend = BackendSystem()
-    window = StandaloneWindow(backend)
-    window.show()
-    sys.exit(app.exec())
+    # 使用 try-except 包裹整個主程式，作為最後一道防線
+    try:
+        app = QApplication(sys.argv)
+        backend = BackendSystem()
+        window = StandaloneWindow(backend)
+        window.show()
+        sys.exit(app.exec())
+    except Exception as e:
+        # 這裡會捕捉到 Backend 初始化失敗等嚴重錯誤
+        error_msg = traceback.format_exc()
+        print(f"主程式啟動失敗: {error_msg}")
+        if 'sys_logger' in globals():
+            sys_logger.log(f"主程式啟動失敗:\n{error_msg}", is_error=True)

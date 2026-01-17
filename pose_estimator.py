@@ -512,7 +512,7 @@ class PoseEstimator(object):
     # 加在 PoseEstimator 類別的最後面
     def reset_memory(self):
         """重置所有計數器與狀態，防止警報卡死"""
-        print("PoseEstimator: 重置記憶狀態")
+        # print("PoseEstimator: 重置記憶狀態")
         self.frame_queue = Queue(maxsize=self.queue_size)
         self.continues_queue = Queue(maxsize=self.queue_size)
         
