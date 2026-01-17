@@ -3,7 +3,7 @@ import math
 import time
 from queue import Queue
 import numpy as np
-
+import csv
 
 import wall_info
 
@@ -38,9 +38,12 @@ def check_consecutive_trigger_with_one_break(queue, required_consecutive=3):
 
 class PoseEstimator(object):
 
-    def __init__(self, cf_thres, cam_id, wall_config=None):
+    def __init__(self, cf_thres, cam_id, scale_ratio, wall_config=None, record_diagram_toCSV=False):
+        
+        self.record_diagram_toCSV = record_diagram_toCSV # 是否儲存成csv檔
         self.cf_thres = cf_thres  # 信心值門檻
         self.cam_id = cam_id
+        self.scale_ratio = scale_ratio  # 新增：縮放倍率
         self.wall_config = wall_config  # 接收牆壁設定
         self.time_interval = 0.0
 
@@ -58,13 +61,10 @@ class PoseEstimator(object):
         self.hand_shift_flag = 0  # 手腕位移速度條件狀態
         self.hand_shift_count = 0  # 計算滿足手腕位移條件的次數
         self.hand_trigger_event = 0
-
+        self.current_timestamp = None
         self.csv_hand = f'hand_log{cam_id}.csv'  # 記錄右手數據的 CSV 檔案
-
         self.right_wrist = None
         self.left_wrist = None
-        self.current_timestamp = None
-
         # **************************************
         self.right_distance = 0  # 右手腕移動距離
         self.right_velocity = 0.0  # 右手腕位移速度
@@ -78,51 +78,27 @@ class PoseEstimator(object):
 
         self.frame_data = dict()
         self.frame_data_copy = dict()
-
         # **********************************************************************************
         self.thres_avgAngle = 120  # 手肘平均角度門檻
         # **********************************************************************************
-
-        # **************************************
         # *********************
         self.continues_queue = None
         # self.continues_queue = Queue(maxsize=self.queue_size)
         # *********************
-        self.hand_harm_alert_sent = False
-        self.harm_alert = False  # 表示是否剛剛偵測出新事件
-
+        self.hand_harm_alert_sent = False # 表示是否剛剛偵測出新事件
         #######################################
-        self.csv_ankle = f'ankle_log{cam_id}.csv'
-        self.ankle_thre_dist = 15  # 腳踝接近牆壁的門檻值
+        self.ankle_thre_dist = 15 * scale_ratio  # 腳踝接近牆壁的門檻值 15 * 4 
         self.near_ankle_state = False
         #######################################
         # 左右腳踝接近'左邊牆壁'的距離
-        self.min_leftAnkleNearLeftWallDist = 0.0
-        self.min_rightAnkleNearLeftWallDist = 0.0
-        # # 左右腳踝接近'右邊牆壁'的距離
-        self.min_leftAnkleNearRightWallDist = 0.0
-        self.min_rightAnkleNearRightWallDist = 0.0
-        #######################################
-        # 以保護室"門口"鏡頭 cam0 ----------------------
-        # 接近AB牆(左邊)左右腳踝
-        self.cam0_AB_L_ankle_near_dist = 0.0
-        self.cam0_AB_R_ankle_near_dist = 0.0
-        # 接近AC牆(右邊)左右腳踝
-        self.cam0_AC_L_ankle_near_dist = 0.0
-        self.cam0_AC_R_ankle_near_dist = 0.0
-        #######################################
-        # 以保護室"深處"鏡頭 cam1 ----------------------
-        # 接近AB牆(左邊)左右腳踝
-        self.cam1_AB_L_ankle_near_dist = 0.0
-        self.cam1_AB_R_ankle_near_dist = 0.0
-        # 接近AC牆(右邊)左右腳踝
-        self.cam1_AC_L_ankle_near_dist = 0.0
-        self.cam1_AC_R_ankle_near_dist = 0.0
-        #######################################
-
+        self.leftAnkleToLeftWallDist = 0.0
+        self.rightAnkleToLeftWallDist = 0.0
+        # 左右腳踝接近'右邊牆壁'的距離
+        self.leftAnkleToRightWallDist = 0.0
+        self.rightAnkleToRightWallDist = 0.0
         #######################################
         self.csv_head = f'head_log{cam_id}.csv'
-        self.head_thre_dist = 50  # 頭部位移速度的門檻值
+        self.head_thre_dist = 200  # 頭部位移速度的門檻值 50
 
         self.nose = None
         self.nose_distance = 0  # 鼻子移動距離
@@ -134,17 +110,17 @@ class PoseEstimator(object):
 
         self.head_angle_change = 0.0
         self.head_avg_angle = 0
+        
+        if record_diagram_toCSV:
+            # 初始化 CSV，寫入標頭
+            with open(self.csv_hand, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(['Frame', 'R_Velocity', 'R_Angel', 'R_AvgAgl', 'L_Velocity', 'L_Angel', 'L_AvgAgl', 'Count', 'Self Harm']) # 手肘角度
 
-        #  # 初始化 CSV，寫入標頭
-        # with open(self.csv_hand, mode='w', newline='') as file:
-        #     writer = csv.writer(file)
-        #     writer.writerow(['Frame', 'R_Velocity', 'R_Angel', 'R_AvgAgl', 'L_Velocity', 'L_Angel', 'L_AvgAgl', 'Count', 'Trigger Event', 'Self Harm']) # 手肘角度
-
-        # 觀察鼻子與牆壁距離 / 頭部的位移速度
-        # with open(self.csv_ankle, mode='w', newline='') as file:
-        #     writer = csv.writer(file)
-        #     writer.writerow(['Frame', 'LL_Dist', 'RL_Dist', 'nearState', 'nose_Velocity', 'Count', 'Trigger Event', 'Self Harm']) # 幀, 左腳接近左，右腳接近左
-        # writer.writerow(['Frame', 'LL_Dist', 'RL_Dist', 'LR_Dist', 'RR_Dist', 'nearState']) # 幀, 左腳接近左，右腳接近左，左腳接近右，右腳接近右
+            # 觀察鼻子與牆壁距離 / 頭部的位移速度
+            with open(self.csv_head, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(['Frame', 'LL_Dist', 'RL_Dist', 'LR_Dist', 'RR_Dist', 'nearState', 'nose_Velocity', 'Count', 'Trigger Event', 'Self Harm']) # 幀, 左腳接近左，右腳接近左
     
     def update_fps(self, fps_size):
         """根據新的 fps 動態調整序列長度"""
@@ -169,40 +145,43 @@ class PoseEstimator(object):
         #########################################
         # 可以 Loss 掉兩個低於門檻值的關節點
         if len(valid_kpts) >= 15:
-
             self.near_ankle_state = False
             ######### 計算腳踝 ##################################################################################################################
             left_ankle, right_ankle = kpts_list[15][:2], kpts_list[16][:2]
-
             # 左牆壁線
             if self.wall_config:
-                left_wall_start = self.wall_config['left']
-                # 假設牆壁是垂直的，或者我們只需要一個參考線段
-                # 這裡我們使用 wall_config 中的 'left' 作為終點，並推算起點，或者如果 wall_config 提供了完整的線段更好
-                # 但 main_2.py 中只提供了 'left': (10, 120) 這樣的單點 (end point?)
-                # 回頭看 main_2.py 的 draw_wall_lines:
-                # cv2.line(img, center, left_wall_end, color, thickness)
-                # 所以線段是 center -> left_wall_end
-
                 wall_center = self.wall_config['center']
                 left_wall_end = self.wall_config['left']
                 right_wall_end = self.wall_config['right']
+                # 左右腳接近左側牆壁線
+                self.leftAnkleToLeftWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center, left_wall_end)
+                self.rightAnkleToLeftWallDist = self.calculate_distance_point_to_segment(right_ankle, wall_center, left_wall_end)
+                # 左右腳接近右側牆壁線
+                self.leftAnkleToRightWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center, right_wall_end)
+                self.rightAnkleToRightWallDist = self.calculate_distance_point_to_segment(right_ankle, wall_center, right_wall_end)
 
-                # 左右腳
-                self.min_leftAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center,
-                                                                                              left_wall_end)
-                self.min_rightAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(right_ankle, wall_center,
-                                                                                               left_wall_end)
-
-                # 右牆壁 (如果需要)
-                self.min_leftAnkleNearRightWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center,
-                                                                                               right_wall_end)
-                self.min_rightAnkleNearRightWallDist = self.calculate_distance_point_to_segment(right_ankle,
-                                                                                                wall_center,
-                                                                                                right_wall_end)
-
-                if self.min_leftAnkleNearLeftWallDist < self.ankle_thre_dist or self.min_rightAnkleNearLeftWallDist < self.ankle_thre_dist:
+                # ******************************************************************
+                if (self.leftAnkleToLeftWallDist < self.ankle_thre_dist or 
+                    self.rightAnkleToLeftWallDist < self.ankle_thre_dist or 
+                    self.leftAnkleToRightWallDist < self.ankle_thre_dist or 
+                    self.rightAnkleToRightWallDist < self.ankle_thre_dist):
                     self.near_ankle_state = True
+
+                # 在實驗室環境下測試用
+                # # 左右腳
+                # self.min_leftAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center,
+                #                                                                               left_wall_end)
+                # self.min_rightAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(right_ankle, wall_center,
+                #                                                                                left_wall_end)
+                # # 右牆壁 (如果需要)
+                # self.min_leftAnkleNearRightWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center,
+                #                                                                                right_wall_end)
+                # self.min_rightAnkleNearRightWallDist = self.calculate_distance_point_to_segment(right_ankle,
+                #                                                                                 wall_center,
+                #                                                                                 right_wall_end)
+
+                # if self.min_leftAnkleNearLeftWallDist < self.ankle_thre_dist or self.min_rightAnkleNearLeftWallDist < self.ankle_thre_dist:
+                #     self.near_ankle_state = True
                 else:
                     self.near_ankle_state = False
             else:
@@ -301,14 +280,13 @@ class PoseEstimator(object):
             self.head_trigger_event = 0
             self.right_velocity = 0
             self.left_velocity = 0
-            
             # 如果人消失了，警報狀態必須強制解除，否則會卡在 True
+            self.near_ankle_state = False  # <--- 接近牆壁線狀態
             self.hand_harm_alert_sent = False
             self.head_harm_alert_sent = False
-
+            # 補充可能缺失的字段 =================================================================
             if self.frame_data_copy:
                 self.frame_data = self.frame_data_copy.copy()
-                # 補充可能缺失的字段
                 # 確保補值時將所有欄位補充完整，並防止影響位移計算
                 self.frame_data["right_velocity"] = 0
                 self.frame_data["left_velocity"] = 0
@@ -316,9 +294,7 @@ class PoseEstimator(object):
                 self.frame_data["left_elbow_angle"] = self.frame_data.get("left_elbow_angle", 0)
                 self.frame_data["hand_shift_flag"] = 0
                 self.frame_data["head_shift_flag"] = 0
-                self.frame_data["min_leftAK_near_LeftWall_D"] = 0
-                self.frame_data["min_rightAK_near_LeftWall_D"] = 0
-
+                
             else:
                 # 若沒有上一幀資料，給與預設值
                 self.frame_data = {
@@ -329,8 +305,6 @@ class PoseEstimator(object):
                     "left_elbow_angle": 0,
                     "hand_shift_flag": 0,
                     "head_shift_flag": 0,
-                    "min_leftAK_near_LeftWall_D": 0,
-                    "min_rightAK_near_LeftWall_D": 0,
                     # --- 新增以下補值以避免 KeyError ---
                     "right_wrist": [0, 0], 
                     "left_wrist": [0, 0],
@@ -357,10 +331,8 @@ class PoseEstimator(object):
                 # 從隊列中提取所有幀的手腕 Y 座標
                 # right_wrist_y_list = [frame["right_wrist"][1] for frame in list(self.frame_queue.queue)]
                 # left_wrist_y_list = [frame["left_wrist"][1] for frame in list(self.frame_queue.queue)]
-
                 right_wrist_y_list = [frame.get("right_wrist", [0, 0])[1] for frame in list(self.frame_queue.queue)]
                 left_wrist_y_list = [frame.get("left_wrist", [0, 0])[1] for frame in list(self.frame_queue.queue)]
-
                 # 計算右手腕 Y 軸最大與最小差
                 right_wrist_y_max = max(right_wrist_y_list)
                 right_wrist_y_min = min(right_wrist_y_list)
@@ -425,31 +397,46 @@ class PoseEstimator(object):
                             self.head_harm_alert_sent = True
                     else:
                         self.head_harm_alert_sent = False
-
+                        
+            if self.record_diagram_toCSV:
+                # 記錄到 CSV 手腕位移距離與速度
+                with open(self.csv_hand, mode='a', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(
+                        [frame_count, 
+                        round(self.right_velocity),
+                        self.right_elbow_angle,
+                        self.right_avg_angle,  # 這些資料如果沒變化會是 0
+                        round(self.left_velocity),
+                        self.left_elbow_angle,
+                        self.left_avg_angle,  # 這些資料如果沒變化會是 0
+                        self.hand_shift_count,
+                        self.hand_harm_alert_sent])
+                
+            # # 記錄到 CSV 腳踝與牆壁距離與鼻子位移速度
+            # with open(self.csv_head, mode='a', newline='') as file:
+            #     writer = csv.writer(file)
+            #     writer.writerow([frame_count, 
+            #         round(self.leftAnkleToLeftWallDist), 
+            #         round(self.rightAnkleToLeftWallDist), 
+            #         round(self.leftAnkleToRightWallDist), 
+            #         round(self.rightAnkleToRightWallDist), 
+            #         self.near_ankle_state, 
+            #         self.nose_velocity, 
+            #         self.head_shift_count, 
+            #         self.head_trigger_event, 
+            #         self.head_harm_alert_sent])
         # 返回 18
         return (frame_count, round(self.right_velocity), self.right_elbow_angle, self.right_avg_angle,
                 round(self.left_velocity), self.left_elbow_angle, self.left_avg_angle,
                 self.hand_shift_count, self.hand_harm_alert_sent,
                 self.near_ankle_state,
-                round(self.min_leftAnkleNearLeftWallDist, 2),
-                round(self.min_rightAnkleNearLeftWallDist, 2),
-                round(self.min_leftAnkleNearRightWallDist, 2),
-                round(self.min_rightAnkleNearRightWallDist, 2),
+                round(self.leftAnkleToLeftWallDist, 2),
+                round(self.rightAnkleToLeftWallDist, 2),
+                round(self.leftAnkleToRightWallDist, 2),
+                round(self.rightAnkleToRightWallDist, 2),
                 round(self.nose_velocity), self.head_shift_count, self.head_harm_alert_sent, self.head_angle_change)
-
-        # return (frame_count, round(self.right_velocity), self.right_elbow_angle, self.right_avg_angle,
-        #         round(self.left_velocity), self.left_elbow_angle, self.left_avg_angle,
-        #         self.hand_shift_count, self.hand_harm_alert_sent,
-        #         self.near_ankle_state,
-        #         round(self.cam0_AB_L_ankle_near_dist),
-        #         round(self.cam0_AB_R_ankle_near_dist),
-        #         round(self.cam0_AC_L_ankle_near_dist),
-        #         round(self.cam0_AC_R_ankle_near_dist),
-        #         round(self.cam1_AB_L_ankle_near_dist),
-        #         round(self.cam1_AB_R_ankle_near_dist),
-        #         round(self.cam1_AC_L_ankle_near_dist),
-        #         round(self.cam1_AC_R_ankle_near_dist),
-        #         round(self.nose_velocity), self.head_shift_count, self.head_harm_alert_sent, self.head_angle_change)
+    
 
     # 計算向量長度
     def calculate_distance(self, prev_point, curr_point):
