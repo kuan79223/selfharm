@@ -1,0 +1,29 @@
+[2026-01-07 00:00:04] [INFO] 跨日更新: 2026/01/06 -> 2026/01/07
+[2026-01-07 11:20:26] [INFO] 偵測到自傷行為！
+[2026-01-07 13:34:26] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-01-07 13:34:28] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-01-07 13:37:46] [INFO] 系統啟動 (System Startup)
+[2026-01-07 13:37:53] [INFO] Thermal 模型載入成功
+[2026-01-07 13:37:53] [INFO] 啟動相機接收 Port: 5555, 5556
+[2026-01-07 13:38:13] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-01-07 13:38:13] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-01-07 19:13:53] [INFO] 系統啟動 (System Startup)
+[2026-01-07 19:13:59] [INFO] Thermal 模型載入成功
+[2026-01-07 19:13:59] [INFO] 啟動相機接收 Port: 5555, 5556
+[2026-01-07 19:34:32] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-01-07 19:34:32] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-01-07 19:35:51] [INFO] 系統啟動 (System Startup)
+[2026-01-07 19:35:58] [INFO] Thermal 模型載入成功
+[2026-01-07 19:35:58] [INFO] 啟動相機接收 Port: 5555, 5556
+[2026-01-07 19:38:37] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-01-07 19:38:37] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-01-07 20:25:31] [INFO] 系統啟動 (System Startup)
+[2026-01-07 20:25:37] [INFO] Thermal 模型載入成功
+[2026-01-07 20:25:37] [INFO] 啟動相機接收 Port: 5555, 5556
+[2026-01-07 20:28:10] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-01-07 20:28:13] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-01-07 20:28:22] [INFO] 系統啟動 (System Startup)
+[2026-01-07 20:28:28] [INFO] Thermal 模型載入成功
+[2026-01-07 20:28:28] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-01-07 20:29:31] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-01-07 20:29:31] [INFO] 系統已安全中止 (Shutdown Complete)

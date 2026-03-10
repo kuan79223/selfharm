@@ -38,9 +38,12 @@ def check_consecutive_trigger_with_one_break(queue, required_consecutive=3):
 
 class PoseEstimator(object):
 
-    def __init__(self, cf_thres, cam_id, scale_ratio, wall_config=None, record_diagram_toCSV=False):
+    def __init__(self, cf_thres, cam_id, scale_ratio, wall_config=None, record_diagram_to_csv=False, algo_cfg=None):
         
-        self.record_diagram_toCSV = record_diagram_toCSV # 是否儲存成csv檔
+        if algo_cfg is None:
+            algo_cfg = {}
+
+        self.record_diagram_to_csv = record_diagram_to_csv # 是否儲存成csv檔
         self.cf_thres = cf_thres  # 信心值門檻
         self.cam_id = cam_id
         self.scale_ratio = scale_ratio  # 新增：縮放倍率
@@ -49,12 +52,14 @@ class PoseEstimator(object):
 
         self.queue_size = None
         print('預設序列長度', self.queue_size)
-        # *********************
         self.frame_queue = None
-        # self.frame_queue = Queue(maxsize=self.queue_size)
-        # *********************
-        self.threshold_distance = 450  # 手腕位移速度門檻值  ****** 用兩顆鏡頭 FPS 會被減半，門檻值也減半ㄆ
-        
+        # self.threshold_distance = 300  # 手腕位移速度門檻值  ****** 用兩顆鏡頭 FPS 會被減半，門檻值也減半ㄆ
+        self.threshold_distance = algo_cfg.get('wrist_threshold_dist', 300)
+        self.thres_avgAngle = algo_cfg.get('elbow_thres_avgAngle', 120)  # 手肘平均角度門檻
+        base_ankle_dist = algo_cfg.get('ankle_thre_dist_base', 15)  # 腳踝接近牆壁的門檻值 15
+        self.ankle_thre_dist = base_ankle_dist * scale_ratio
+        self.head_thre_dist = algo_cfg.get('head_threshold_dist', 150)
+
         self.thres_count = None
         self.thre_velocity = 0
         self.ratio_fps = 0
@@ -79,7 +84,7 @@ class PoseEstimator(object):
         self.frame_data = dict()
         self.frame_data_copy = dict()
         # **********************************************************************************
-        self.thres_avgAngle = 120  # 手肘平均角度門檻
+        # self.thres_avgAngle = 120  # 手肘平均角度門檻
         # **********************************************************************************
         # *********************
         self.continues_queue = None
@@ -87,7 +92,7 @@ class PoseEstimator(object):
         # *********************
         self.hand_harm_alert_sent = False # 表示是否剛剛偵測出新事件
         #######################################
-        self.ankle_thre_dist = 15 * scale_ratio  # 腳踝接近牆壁的門檻值 15 * 4 
+        # self.ankle_thre_dist = 15 * scale_ratio  # 腳踝接近牆壁的門檻值 15 * 4 
         self.near_ankle_state = False
         #######################################
         # 左右腳踝接近'左邊牆壁'的距離
@@ -98,7 +103,7 @@ class PoseEstimator(object):
         self.rightAnkleToRightWallDist = 0.0
         #######################################
         self.csv_head = f'head_log{cam_id}.csv'
-        self.head_thre_dist = 150  # 頭部位移速度的門檻值 50
+        # self.head_thre_dist = 150  # 頭部位移速度的門檻值 50
 
         self.nose = None
         self.nose_distance = 0  # 鼻子移動距離
@@ -111,7 +116,7 @@ class PoseEstimator(object):
         self.head_angle_change = 0.0
         self.head_avg_angle = 0
         
-        if record_diagram_toCSV:
+        if record_diagram_to_csv:
             # 初始化 CSV，寫入標頭
             with open(self.csv_hand, mode='w', newline='') as file:
                 writer = csv.writer(file)
@@ -398,7 +403,7 @@ class PoseEstimator(object):
                     else:
                         self.head_harm_alert_sent = False
                         
-            if self.record_diagram_toCSV:
+            if self.record_diagram_to_csv:
                 # 記錄到 CSV 手腕位移距離與速度
                 with open(self.csv_hand, mode='a', newline='') as file:
                     writer = csv.writer(file)

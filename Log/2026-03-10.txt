@@ -1,0 +1,275 @@
+[2026-03-10 00:00:05] [INFO] 跨日更新: 2026/03/09 -> 2026/03/10
+[2026-03-10 09:09:52] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 09:09:52] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 14:43:42] [INFO] 系統啟動 (System Startup)
+[2026-03-10 14:43:42] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 14:43:42] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 14:43:51] [INFO] Thermal 模型載入成功
+[2026-03-10 14:43:51] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 14:43:51] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 594, in <module>
+    backend = BackendSystem()
+  File "Server_UI.py", line 167, in __init__
+    base_path.mkdir(parents=True, exist_ok=True)
+  File "/home/aiot/miniforge3/envs/selfharm_3810/lib/python3.8/pathlib.py", line 1288, in mkdir
+    self._accessor.mkdir(self, mode)
+PermissionError: [Errno 13] Permission denied: '/mnt/usb_ssd/Project'
+
+[2026-03-10 14:51:35] [INFO] 系統啟動 (System Startup)
+[2026-03-10 14:51:35] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 14:51:35] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 14:51:41] [INFO] Thermal 模型載入成功
+[2026-03-10 14:51:41] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 14:54:06] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-10 14:54:10] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 14:54:12] [INFO] 使用者手動重置警報
+[2026-03-10 14:54:12] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 14:54:12] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: False)
+[2026-03-10 14:54:13] [INFO] 使用者手動重置警報
+[2026-03-10 14:54:13] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 14:54:19] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: False)
+[2026-03-10 14:55:18] [INFO] 使用者手動重置警報
+[2026-03-10 14:55:18] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 15:08:52] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: False)
+[2026-03-10 15:17:54] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 15:17:55] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 15:17:56] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 15:17:57] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 15:18:08] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 15:18:09] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 15:18:11] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 15:18:13] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 15:18:14] [INFO] 使用者手動重置警報
+[2026-03-10 15:18:14] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 15:35:51] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: False)
+[2026-03-10 16:55:20] [INFO] 使用者手動重置警報
+[2026-03-10 16:55:20] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 17:02:54] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: False)
+[2026-03-10 18:38:27] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 18:38:30] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 19:18:56] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 19:18:56] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 19:21:19] [INFO] 系統啟動 (System Startup)
+[2026-03-10 19:21:20] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 526, in <module>
+    backend = BackendSystem(config_data=sys_config)
+TypeError: __init__() got an unexpected keyword argument 'config_data'
+
+[2026-03-10 19:22:28] [INFO] 系統啟動 (System Startup)
+[2026-03-10 19:22:28] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 19:22:28] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 19:22:34] [INFO] Thermal 模型載入成功
+[2026-03-10 19:22:34] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 19:22:34] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 528, in <module>
+    backend = BackendSystem(config_data=sys_config)
+  File "Server_UI.py", line 195, in __init__
+    t = DetectThread(i, cam, self.model, self.model_lock, self.device,
+  File "/home/aiot/Project/detect_thread.py", line 157, in __init__
+    self.scaled_text_size = DRAW_SCALE * self.scale_x  # 這裡調整文字大小
+NameError: name 'DRAW_SCALE' is not defined
+
+[2026-03-10 19:25:06] [INFO] 系統啟動 (System Startup)
+[2026-03-10 19:25:06] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 19:25:06] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 19:25:12] [INFO] Thermal 模型載入成功
+[2026-03-10 19:25:12] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 19:25:12] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 529, in <module>
+    backend = BackendSystem(config_data=sys_config)
+  File "Server_UI.py", line 196, in __init__
+    t = DetectThread(i, cam, self.model, self.model_lock, self.device,
+  File "/home/aiot/Project/detect_thread.py", line 203, in __init__
+    self.pose_estimator = pose_estimator.PoseEstimator(cf_thres=1,
+TypeError: __init__() got an unexpected keyword argument 'algo_cfg'
+
+[2026-03-10 19:26:54] [INFO] 系統啟動 (System Startup)
+[2026-03-10 19:26:54] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 19:26:54] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 19:27:00] [INFO] Thermal 模型載入成功
+[2026-03-10 19:27:00] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 19:28:10] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 19:28:10] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 19:32:26] [INFO] 系統啟動 (System Startup)
+[2026-03-10 19:32:26] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 19:32:26] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 19:32:32] [INFO] Thermal 模型載入成功
+[2026-03-10 19:32:32] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 19:39:28] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-10 19:47:53] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 19:47:53] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 19:48:01] [INFO] 系統啟動 (System Startup)
+[2026-03-10 19:48:02] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 19:48:02] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 19:48:08] [INFO] Thermal 模型載入成功
+[2026-03-10 19:48:08] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 19:48:08] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 529, in <module>
+    backend = BackendSystem(config_data=sys_config)
+  File "Server_UI.py", line 196, in __init__
+    t = DetectThread(i, cam, self.model, self.model_lock, self.device,
+  File "/home/aiot/Project/detect_thread.py", line 157, in __init__
+    self.scaled_text_size = self.draw_scale * self.scale_x  # 這裡調整文字大小
+AttributeError: 'DetectThread' object has no attribute 'draw_scale'
+
+[2026-03-10 20:04:30] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:04:31] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:04:31] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:04:37] [INFO] Thermal 模型載入成功
+[2026-03-10 20:04:37] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:04:37] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 529, in <module>
+    backend = BackendSystem(config_data=sys_config)
+  File "Server_UI.py", line 196, in __init__
+    t = DetectThread(i, cam, self.model, self.model_lock, self.device,
+  File "/home/aiot/Project/detect_thread.py", line 203, in __init__
+    self.pose_estimator = pose_estimator.PoseEstimator(cf_thres=1,
+TypeError: __init__() got an unexpected keyword argument 'record_diagram_to_csv'
+
+[2026-03-10 20:05:18] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:05:19] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:05:19] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:05:25] [INFO] Thermal 模型載入成功
+[2026-03-10 20:05:25] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:05:25] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 529, in <module>
+    backend = BackendSystem(config_data=sys_config)
+  File "Server_UI.py", line 196, in __init__
+    t = DetectThread(i, cam, self.model, self.model_lock, self.device,
+  File "/home/aiot/Project/detect_thread.py", line 203, in __init__
+    self.pose_estimator = pose_estimator.PoseEstimator(cf_thres=1,
+  File "/home/aiot/Project/pose_estimator.py", line 119, in __init__
+    if record_diagram_toCSV:
+NameError: name 'record_diagram_toCSV' is not defined
+
+[2026-03-10 20:06:10] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:06:10] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:06:10] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:06:16] [INFO] Thermal 模型載入成功
+[2026-03-10 20:06:16] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:06:53] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:06:54] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 20:07:01] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:07:01] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:07:01] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:07:07] [INFO] Thermal 模型載入成功
+[2026-03-10 20:07:07] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:07:19] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:07:19] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 20:16:27] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:16:27] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:16:27] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:16:34] [INFO] Thermal 模型載入成功
+[2026-03-10 20:16:34] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:22:14] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:22:14] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 20:22:24] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:22:24] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:22:24] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:22:30] [INFO] Thermal 模型載入成功
+[2026-03-10 20:22:30] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:24:01] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-10 20:25:44] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:25:45] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 20:25:52] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:25:52] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:25:52] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:25:58] [INFO] Thermal 模型載入成功
+[2026-03-10 20:25:58] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:26:20] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:26:21] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 20:26:27] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:26:28] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:26:28] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:26:34] [INFO] Thermal 模型載入成功
+[2026-03-10 20:26:34] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:26:44] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:26:44] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 20:33:23] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:33:23] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:33:23] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:33:29] [INFO] Thermal 模型載入成功
+[2026-03-10 20:33:29] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:33:47] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:33:47] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 20:37:26] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:37:26] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:37:26] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:37:33] [INFO] Thermal 模型載入成功
+[2026-03-10 20:37:33] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:40:53] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: True)
+[2026-03-10 20:41:14] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 20:41:15] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 20:41:15] [INFO] 使用者手動重置警報
+[2026-03-10 20:41:15] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 20:41:17] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 20:41:17] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 20:42:45] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: True)
+[2026-03-10 20:43:12] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 20:43:13] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 20:43:14] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 20:43:15] [INFO] 使用者手動重置警報
+[2026-03-10 20:43:15] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 20:44:28] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: False)
+[2026-03-10 20:46:04] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 20:46:04] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 20:55:38] [INFO] 使用者手動重置警報
+[2026-03-10 20:55:38] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 20:55:40] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:55:41] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 20:55:49] [INFO] 系統啟動 (System Startup)
+[2026-03-10 20:55:49] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 20:55:49] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 20:55:56] [INFO] Thermal 模型載入成功
+[2026-03-10 20:55:56] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 20:56:24] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 20:56:24] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 21:01:30] [INFO] 系統啟動 (System Startup)
+[2026-03-10 21:01:30] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 21:01:30] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 21:01:36] [INFO] Thermal 模型載入成功
+[2026-03-10 21:01:36] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 21:02:04] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: True)
+[2026-03-10 21:02:09] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 21:02:10] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 21:02:11] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 21:02:13] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 21:02:14] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 21:02:15] [INFO] 使用者手動重置警報
+[2026-03-10 21:02:15] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 21:05:47] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: False)
+[2026-03-10 21:07:20] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 21:07:20] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 21:07:55] [INFO] 系統啟動 (System Startup)
+[2026-03-10 21:07:55] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 21:07:55] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 21:08:01] [INFO] Thermal 模型載入成功
+[2026-03-10 21:08:01] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 21:08:35] [INFO] 已設定蜂鳴器於 180 秒後自動關閉。
+[2026-03-10 21:08:35] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: True)
+[2026-03-10 21:11:35] [INFO] 定時器時間到，自動停止蜂鳴器。
+[2026-03-10 21:11:55] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 21:11:56] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 21:11:57] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 21:11:57] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-10 21:11:59] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-10 21:12:03] [INFO] 使用者手動重置警報
+[2026-03-10 21:12:03] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-10 21:12:04] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: False)
+[2026-03-10 21:15:09] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-10 21:15:10] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-10 21:17:26] [INFO] 系統啟動 (System Startup)
+[2026-03-10 21:17:26] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-10 21:17:26] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-10 21:17:32] [INFO] Thermal 模型載入成功
+[2026-03-10 21:17:32] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-10 21:17:49] [INFO] 已設定蜂鳴器於 5 秒後自動關閉。
+[2026-03-10 21:17:49] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: True)
+[2026-03-10 21:17:54] [INFO] 定時器時間到，自動停止蜂鳴器。

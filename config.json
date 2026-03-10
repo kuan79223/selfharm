@@ -1,0 +1,47 @@
+{
+  "system": {
+    "alarm_state_init": false
+  },
+  "alert": {
+    "buzzer_duration_sec": 5
+  },
+  "algorithm_thresholds": {
+    "wrist_threshold_dist": 450,
+    "elbow_thres_avgAngle": 120,
+    "ankle_thre_dist_base": 15,
+    "head_threshold_dist": 150
+  },
+  "detection_params": {
+    "calibration_file": "calibration_thermal_11.npz",
+    "crop_coords": [50, 550, 50, 420],
+    "record_diagram_to_csv": true,
+    "yolo": {
+      "conf_threshold": 0.45,
+      "iou_threshold": 0.25
+    },
+    "recording": {
+      "pre_event_seconds": 10,
+      "post_event_seconds": 10
+    }
+  },
+  "drawing_params": {
+    "font_scale": 0.2,
+    "line_thickness": 1,
+    "colors": {
+      "white": [255, 255, 255],
+      "black": [0, 0, 0],
+      "green": [0, 255, 0]
+    }
+  },
+  "wall_configs": {
+    "0": {
+      "center": [90, 70], "ceiling": [90, 0], "left": [10, 120], "right": [160, 110]
+    },
+    "1": {
+      "center": [80, 70], "ceiling": [80, 0], "left": [10, 120], "right": [160, 110]
+    },
+    "default": {
+      "center": [105, 80], "ceiling": [105, 0], "left": [60, 120], "right": [160, 90]
+    }
+  }
+}

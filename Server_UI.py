@@ -9,13 +9,14 @@ import numpy as np
 from datetime import date, datetime, timedelta  # 【新增】timedelta 用於計算午夜時間差
 from pathlib import Path
 import traceback
+import json # 讀取 config.json
 
 # PyQt6 UI 模組
 from PyQt6.QtWidgets import (
     QApplication, QLabel, QWidget, QProgressBar, 
     QVBoxLayout, QHBoxLayout, QSplitter, QMessageBox, 
     QTreeView, QPushButton, QSizePolicy, QFileDialog,
-    QTextEdit, QMenu, QAbstractItemView, QHeaderView
+    QTextEdit, QMenu, QAbstractItemView, QHeaderView, QSlider
 )
 from PyQt6.QtGui import QImage, QPixmap, QAction, QFileSystemModel, QColor, QTextCursor, QFont
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, QDir
@@ -25,7 +26,10 @@ from camera_thread import CameraThread
 from detect_thread import DetectThread
 from models.experimental import attempt_load
 from utils.torch_utils import select_device
-import globals as gl
+# import globals as gl
+
+# 【新增】匯入獨立封裝的蜂鳴器模組
+from buzzer_controller import BuzzerController
 
 
 def get_executable_dir():
@@ -102,6 +106,20 @@ class SystemLogger:
 # 初始化全域 Logger
 sys_logger = SystemLogger()
 
+# 讀取 config 參數
+def load_app_config(config_path='config.json'):
+    base_dir = get_executable_dir()
+    full_path = os.path.join(base_dir, config_path)
+    if not os.path.exists(full_path):
+        print(f'找不到{full_path}將套用系統預測值。')
+        return {}
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f'設定檔解析失敗: {e}')
+        return {}
+
 # 捕捉全域未處理異常 (Global Exception Hook)
 def handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
@@ -124,11 +142,21 @@ sys.excepthook = handle_exception
 # 後端核心
 # ==========================================
 class BackendSystem:
-    def __init__(self):
+    def __init__(self, config_data):
+        self.config = config_data # 儲存全域設定字典
+
         # 【修改】使用絕對路徑，確保 Project 資料夾生成在 exe 旁邊
         exe_dir = get_executable_dir()
-        self.BASE_VIDEO_DIR = os.path.join(exe_dir, "Project")
-        
+        # self.BASE_VIDEO_DIR = os.path.join(exe_dir, "Project")
+        # 改成硬碟**********************************************
+        self.BASE_VIDEO_DIR = "/mnt/usb_ssd/Project"
+        base_path = Path(self.BASE_VIDEO_DIR)
+        base_path.mkdir(parents=True, exist_ok=True) # 若權限正確，這行將順利執行
+        # *****************************************************
+        # 【修改】初始化外部蜂鳴器類別，並將主程式的 Log 系統對接進去
+        self.buzzer = BuzzerController(pin=32, logger_callback=sys_logger.log)
+        sys_logger.log("獨立蜂鳴器模組已掛載")
+
         # 1. 初始化 YOLO
         print("正在載入 Thermal 模型...")
         try:
@@ -161,12 +189,14 @@ class BackendSystem:
         self.current_ui_path = str((base_path / date.today().strftime("%Y/%m/%d")).resolve())
         print(f"系統根目錄: {self.BASE_VIDEO_DIR}")
 
+        self.is_alarm_latched = self.config.get("system", {}).get("alarm_state_init", False)
         # 4. 啟動推論執行緒
         self.threads = []
         for i, cam in enumerate(self.cams):
             t = DetectThread(i, cam, self.model, self.model_lock, self.device,
                              base_path, cam.fps, self.model.names, 
-                             self.device.type != 'cpu', imgsz=640)
+                             self.device.type != 'cpu', imgsz=640,
+                             config=self.config)
             t.start()
             self.threads.append(t)
     
@@ -179,7 +209,8 @@ class BackendSystem:
 
     def reset_alert(self):
         sys_logger.log("執行後端警報重置 (Reset Alert)")
-        gl.alarm_state = False
+        # gl.alarm_state = False
+        self.is_alarm_latched = False
         for t in self.threads:
             if hasattr(t, 'reset_state'):
                 t.reset_state()
@@ -187,9 +218,15 @@ class BackendSystem:
     def stop(self):
         # print("--- 正在關閉系統 ---")
         sys_logger.log("系統正在關閉 (Backend Stopping)...")
+        self.buzzer.cleanup()
+        
         try:
             import detect_thread
             detect_thread.STOP_EVENT.set()
+            
+            import Jetson.GPIO as GPIO
+            GPIO.cleanup()
+
         except:
             pass
             
@@ -207,35 +244,30 @@ class StandaloneWindow(QWidget):
     def __init__(self, backend):
         super().__init__()
         self.backend = backend
-        
         self.setWindowTitle("AIoT Surveillance System (Standalone)")
         self.resize(1700, 950)
         
+        # 系統狀態變數
         self.ui_alert_active = False 
         self.current_date_str = datetime.now().strftime("%Y/%m/%d")
+        
+        # 【新增】蜂鳴器全域啟用狀態 (預設開啟)
+        self.buzzer_enabled = True 
 
         self.setup_ui()
         
-        # 定時更新影像 (30ms)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frames)
         self.timer.start(30) 
 
-        # 【修改 1】 啟動午夜更新排程 (不再使用每 10 秒的 Timer)
         self.schedule_midnight_update()
 
     def setup_ui(self):
         # --- A. 相機顯示區 ---
         self.label_cam0 = QLabel("等待 Cam0 連線...")
         self.label_cam1 = QLabel("等待 Cam1 連線...")
-        
         cam_style = """
-            QLabel {
-                background-color: black; 
-                color: white; 
-                font-size: 20px;
-                border: 2px solid white;
-            }
+            QLabel { background-color: black; color: white; font-size: 20px; border: 2px solid white; }
         """
         for lbl in [self.label_cam0, self.label_cam1]:
             lbl.setStyleSheet(cam_style)
@@ -250,70 +282,80 @@ class StandaloneWindow(QWidget):
         layout_cams.addStretch() 
         layout_cams.setSpacing(20)
 
-        # --- A. 左下角元件：時鐘 (QLabel) ---
+        # --- B. 控制區 ---
         self.label_clock = QLabel("00:00:00")
         self.label_clock.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # 設定字型：Arial, 大小 28, 粗體
         font = QFont("Arial", 28, QFont.Weight.Bold)
         self.label_clock.setFont(font)
-        # 設定外觀：綠字、深灰底、圓角邊框
         self.label_clock.setStyleSheet("""
-            QLabel {
-                color: #2ecc71; 
-                background-color: #2c3e50;
-                padding: 10px;
-                border-radius: 10px;
-                border: 2px solid #555;
-            }
+            QLabel { color: #2ecc71; background-color: #2c3e50; padding: 10px; border-radius: 10px; border: 2px solid #555; }
         """)
 
-        # --- B. 控制區 ---
+        # 主警報按鈕
         self.btn_alert = QPushButton("自傷行為\n(監控中)")
-        self.btn_alert.setFixedSize(200, 200)
+        self.btn_alert.setFixedSize(200, 160) # 稍微調小高度以容納靜音按鈕
         self.btn_alert.clicked.connect(self.reset_alert_state)
-        
-        # 【修改 2】 預設將按鈕設為不可點擊 (Disabled)
         self.btn_alert.setEnabled(False)
         
-        # 定義樣式 (Normal 時顏色可以稍微淡一點表示未啟用，或保持白色但不可按)
         self.style_normal = """
-            QPushButton {
-                background-color: #f0f0f0; /* 稍微灰一點表示待機 */
-                color: #555555;
-                font-size: 24px;
-                font-weight: bold;
-                border: 2px solid #999999;
-                border-radius: 100px;
-            }
+            QPushButton { background-color: #f0f0f0; color: #555555; font-size: 24px; font-weight: bold; border: 2px solid #999999; border-radius: 40px; }
         """
         self.style_alert = """
-            QPushButton {
-                background-color: #c0392b;
-                color: white;
-                font-size: 24px;
-                font-weight: bold;
-                border: 4px solid #e74c3c;
-                border-radius: 100px;
-            }
+            QPushButton { background-color: #c0392b; color: white; font-size: 24px; font-weight: bold; border: 4px solid #e74c3c; border-radius: 40px; }
         """
         self.btn_alert.setStyleSheet(self.style_normal)
+
+        # 【新增】蜂鳴器獨立開關按鈕
+        self.btn_buzzer_toggle = QPushButton("🔊 蜂鳴器：已開啟\n(點擊靜音)")
+        self.btn_buzzer_toggle.setFixedSize(200, 80)
+        self.btn_buzzer_toggle.clicked.connect(self.toggle_buzzer)
+        
+        self.style_buzzer_on = """
+            QPushButton { background-color: #27ae60; color: white; font-size: 16px; font-weight: bold; border-radius: 20px; border: 2px solid #2ecc71; }
+            QPushButton:hover { background-color: #2ecc71; }
+        """
+        self.style_buzzer_off = """
+            QPushButton { background-color: #7f8c8d; color: white; font-size: 16px; font-weight: bold; border-radius: 20px; border: 2px solid #95a5a6; }
+            QPushButton:hover { background-color: #95a5a6; }
+        """
+        self.btn_buzzer_toggle.setStyleSheet(self.style_buzzer_on)
+
+        # 【新增】音量標籤與拉霸條 (Volume Slider) ******************************************
+        self.label_volume = QLabel("🔊 音量: 100%")
+        self.label_volume.setStyleSheet("color: white; font-size: 16px; font-weight: bold;")
+        self.label_volume.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.slider_volume = QSlider(Qt.Orientation.Horizontal)
+        self.slider_volume.setRange(0, 100) # UI 顯示 0% 到 100%
+        self.slider_volume.setValue(100)    # 預設最大音量
+        self.slider_volume.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.slider_volume.setTickInterval(10)
+        self.slider_volume.setStyleSheet("""
+            QSlider::groove:horizontal { border: 1px solid #bbb; background: white; height: 10px; border-radius: 4px; }
+            QSlider::sub-page:horizontal { background: #3498db; border: 1px solid #777; height: 10px; border-radius: 4px; }
+            QSlider::handle:horizontal { background: #2980b9; border: 1px solid #777; width: 18px; margin-top: -5px; margin-bottom: -5px; border-radius: 9px; }
+        """)
+        self.slider_volume.valueChanged.connect(self.change_volume)
+        # ************************************************************************************
 
         self.log_area = QTextEdit()
         self.log_area.setReadOnly(True)
         self.log_area.setStyleSheet("""
-            QTextEdit {
-                background-color: white;
-                font-size: 16px;
-                border: 2px solid #1a5276;
-            }
+            QTextEdit { background-color: white; font-size: 16px; border: 2px solid #1a5276; }
         """)
         self.log_area.setPlaceholderText("系統啟動... 等待事件觸發...")
         self.log_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # 建立一個垂直 Layout 放按鈕跟時鐘
+        # 左下角控制項佈局
         vbox_btn_clock = QVBoxLayout()
-        vbox_btn_clock.addWidget(self.label_clock) # 時鐘在上面
-        vbox_btn_clock.addWidget(self.btn_alert)   # 按鈕在下面
+        vbox_btn_clock.addWidget(self.label_clock)
+        vbox_btn_clock.addWidget(self.btn_alert)
+        vbox_btn_clock.addSpacing(10)
+        vbox_btn_clock.addWidget(self.btn_buzzer_toggle) # 加入靜音開關
+        # 將音量控制加入佈局 ************************************
+        vbox_btn_clock.addWidget(self.label_volume)
+        vbox_btn_clock.addWidget(self.slider_volume)
+        # ****************************************************
         vbox_btn_clock.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout_controls = QHBoxLayout()
@@ -329,128 +371,60 @@ class StandaloneWindow(QWidget):
         container_left = QWidget()
         container_left.setLayout(layout_left_panel)
 
-        # -------------------------------------------------
-        # 2. 右側區域
-        # -------------------------------------------------
-        target_path = self.backend.current_ui_path
-        
-        self.file_label = QLabel(f"今日錄影目錄: {self.current_date_str}")
-        self.file_label.setStyleSheet("color: white; font-weight: bold; font-size: 14px; background: #154360; padding: 5px;")
-        
-        self.file_model = QFileSystemModel()
-        if not os.path.exists(target_path):
-            os.makedirs(target_path)
-
-        self.file_model.setRootPath(target_path)
-        self.file_model.setFilter(QDir.Filter.NoDotAndDotDot | QDir.Filter.AllDirs | QDir.Filter.Files)
-        self.file_model.setNameFilters(["*.mp4", "*.avi"]) 
-        self.file_model.setNameFilterDisables(False)
-
-        self.file_tree = QTreeView()
-        self.file_tree.setModel(self.file_model)
-        self.file_tree.setRootIndex(self.file_model.index(target_path))
-        
-        self.file_tree.setAlternatingRowColors(True)
-        self.file_tree.setAnimated(True)
-        self.file_tree.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        
-        self.file_tree.setColumnHidden(2, True) 
-        self.file_tree.setColumnHidden(3, True)
-        self.file_tree.setColumnWidth(0, 280) 
-        
-        self.file_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.file_tree.customContextMenuRequested.connect(self.open_context_menu)
-        self.file_tree.doubleClicked.connect(self.open_file_system)
-
-        layout_right_panel = QVBoxLayout()
-        layout_right_panel.addWidget(self.file_label)
-        layout_right_panel.addWidget(self.file_tree)
-        
-        container_right = QWidget()
-        container_right.setStyleSheet("background-color: #21618c;") 
-        container_right.setLayout(layout_right_panel)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(container_left)
-        splitter.addWidget(container_right)
-        splitter.setSizes([1400, 300]) 
-
         main_layout = QHBoxLayout()
-        main_layout.addWidget(splitter)
+        # main_layout.addWidget(splitter)
+        main_layout.addWidget(container_left)
+
         self.setLayout(main_layout)
-        
         self.setStyleSheet("background-color: #2c3e50;")
 
     # ==========================================
     # 邏輯功能區
     # ==========================================
-
+    # 【新增】跨日更新機制：每天午夜自動切換錄影目錄，並在 UI 上反映
     def schedule_midnight_update(self):
-        """ 【新增】 計算距離明天 00:00:05 還有多久，設定一次性定時器 """
         now = datetime.now()
-        # 取得明天日期
         tomorrow = now + timedelta(days=1)
-        # 設定為明天的 00:00:05 (多5秒緩衝，確保系統時間已跳轉)
         midnight = datetime(year=tomorrow.year, month=tomorrow.month, day=tomorrow.day, hour=0, minute=0, second=5)
-        
-        # 計算時間差 (秒)
-        seconds_until_midnight = (midnight - now).total_seconds()
-        ms_until_midnight = int(seconds_until_midnight * 1000)
-        
-        print(f"[系統排程] 將於 {seconds_until_midnight:.1f} 秒後 ({midnight}) 執行日期更新檢查")
-        
-        # 設定 SingleShot Timer (只執行一次)
+        ms_until_midnight = int((midnight - now).total_seconds() * 1000)
         QTimer.singleShot(ms_until_midnight, self.perform_date_update)
-
+    
+    # 【修改】跨日更新後的動作：切換錄影目錄、更新 UI 顯示、記錄日誌
     def perform_date_update(self):
-        """ 執行跨日更新邏輯，並排程下一次檢查 """
         now_str = datetime.now().strftime("%Y/%m/%d")
-        
         if now_str != self.current_date_str:
-            # print(f"[UI] 執行跨日更新！ {self.current_date_str} -> {now_str}")
             sys_logger.log(f"跨日更新: {self.current_date_str} -> {now_str}")
             self.current_date_str = now_str
             
-            # 更新介面
-            self.file_label.setText(f"今日錄影目錄: {self.current_date_str}")
+            # self.file_label.setText(f"今日錄影目錄: {self.current_date_str}")
             new_path = os.path.join(self.backend.BASE_VIDEO_DIR, now_str)
-            if not os.path.exists(new_path):
-                os.makedirs(new_path)
-            self.file_tree.setRootIndex(self.file_model.index(new_path))
-            
+            if not os.path.exists(new_path): os.makedirs(new_path)
+            # self.file_tree.setRootIndex(self.file_model.index(new_path))
             self.log_area.append(f"[{datetime.now().strftime('%H:%M:%S')}] 跨日更新完成，切換至新目錄。")
             self.log_area.moveCursor(QTextCursor.MoveOperation.End)
-        
-        # 遞迴呼叫，排程「後天」的午夜更新 (形成每日循環)
         self.schedule_midnight_update()
 
+    # 【修改】更新畫面同時檢查是否有警報訊息，並觸發 UI 反應
     def update_frames(self):
-
-        # 1. 更新時間
         current_time_str = datetime.now().strftime("%H:%M:%S")
         self.label_clock.setText(current_time_str)
         
-        # 【修改】用變數來接收警報類型 (字串)
         detected_alert_msg = None
         data0 = self.backend.get_frame(0)
         if data0:
-            frame, alert_state = data0 # 這裡的 alert_state 變成了字串 (如 "手部") 或 None
+            frame, alert_state = data0
             self.show_frame(self.label_cam0, frame)
-            if alert_state:
-                detected_alert_msg = alert_state # 記錄警報類型
+            if alert_state: detected_alert_msg = alert_state
 
         data1 = self.backend.get_frame(1)
         if data1:
             frame, alert_state = data1
             self.show_frame(self.label_cam1, frame)
-            if alert_state: 
-                # 如果兩機同時觸發，可以用字串串接，或直接覆蓋 (這裡示範覆蓋)
-                detected_alert_msg = alert_state
+            if alert_state: detected_alert_msg = alert_state 
             
         if detected_alert_msg and not self.ui_alert_active:
-            self.trigger_alert_ui(detected_alert_msg) # <--- 傳入類型字串
-
-        
+            self.trigger_alert_ui(detected_alert_msg) 
+    # 【修改】在 update_frames 中加入 alert_state 的檢查，確保 UI 反應與後端狀態同步
     def show_frame(self, label, frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
@@ -458,81 +432,84 @@ class StandaloneWindow(QWidget):
         qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         label.setPixmap(QPixmap.fromImage(qimg))
 
+    # 護理人員手動操作全域蜂鳴器開關
+    def toggle_buzzer(self):
+        """處理護理人員按下靜音/開啟蜂鳴器的邏輯"""
+        self.buzzer_enabled = not self.buzzer_enabled
+        
+        if self.buzzer_enabled:
+            # 狀態：開啟
+            self.btn_buzzer_toggle.setText("🔊 蜂鳴器：已開啟\n(點擊靜音)")
+            self.btn_buzzer_toggle.setStyleSheet(self.style_buzzer_on)
+            sys_logger.log("護理人員操作：開啟蜂鳴器硬體功能")
+            
+            # 若目前正在警報中，恢復發聲
+            if self.ui_alert_active:
+                duration = self.backend.config.get('alert', {}).get('buzzer_duration_sec', 180)
+                self.backend.buzzer.start_alarm()
+        else:
+            # 狀態：靜音
+            self.btn_buzzer_toggle.setText("🔇 蜂鳴器：已靜音\n(點擊開啟)")
+            self.btn_buzzer_toggle.setStyleSheet(self.style_buzzer_off)
+            sys_logger.log("護理人員操作：靜音蜂鳴器硬體功能")
+            
+            # 強制停止目前可能正在發出的聲音
+            self.backend.buzzer.stop_alarm()
+    
+    # 觸發警報時的動作
     def trigger_alert_ui(self, alert_type=''):
         self.ui_alert_active = True
         self.btn_alert.setText("⚠️ 異常發生 ⚠️\n點擊重置")
         self.btn_alert.setStyleSheet(self.style_alert)
-        # 【修改 3】 警報發生時，啟用按鈕讓使用者可以點擊
         self.btn_alert.setEnabled(True)
         
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_msg = f"[{timestamp}] 偵測到【{alert_type}】行為！"
         
-        # 【修改】Log 訊息顯示具體類型
-        log_msg = f"[{timestamp}] 偵測到【{alert_type}】自傷行為！"
+        # 【修改】依據全域開關決定是否發出實體聲音
+        if self.buzzer_enabled:
+            # self.backend.buzzer.start_alarm()
+            duration = self.backend.config.get('alert', {}).get('buzzer_duration_sec', 180)
+            # 👇 【修復重點】補上這行，真正呼叫硬體並傳入 3 分鐘 (180秒) 參數
+            self.backend.buzzer.start_alarm(duration_sec=duration)
+            log_msg += f'蜂鳴器已觸發 (預計響鈴{duration}秒)'
+        else:
+            log_msg += " (蜂鳴器目前為靜音狀態)"
+            
         self.log_area.append(log_msg)
         self.log_area.moveCursor(QTextCursor.MoveOperation.End)
-        # 寫入系統 Log
-        sys_logger.log("偵測到自傷行為！")
+        sys_logger.log(f"偵測到行為: {alert_type} (發聲狀態: {self.buzzer_enabled})")
 
+    # 解除警報時的動作
     def reset_alert_state(self):
-        # print("使用者手動重置警報...")
         sys_logger.log("使用者手動重置警報")
+
+        # 1. 呼叫後端重置推論狀態
         self.backend.reset_alert()
+        # 2. 強制停止硬體蜂鳴器 (綁定消音邏輯)
+        self.backend.buzzer.stop_alarm()
+
         self.ui_alert_active = False
         self.btn_alert.setText("自傷行為\n(監控中)")
         self.btn_alert.setStyleSheet(self.style_normal)
-        
-        # 【修改 4】 重置後，再次禁用按鈕
         self.btn_alert.setEnabled(False)
         
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_area.append(f"[{timestamp}] 警報已手動解除。")
+    
+    # 【新增】處理拉霸條數值變更 **********************************
+    def change_volume(self, value):
+        self.label_volume.setText(f"🔊 音量: {value}%")
         
-    def open_context_menu(self, position):
-        indexes = self.file_tree.selectedIndexes()
-        if len(indexes) > 0:
-            index = indexes[0]
-            file_path = self.file_model.filePath(index)
-            menu = QMenu()
-            action_open = QAction("開啟 (Open)", self)
-            action_export = QAction("匯出/下載 (Export)", self)
-            action_open.triggered.connect(lambda: self.open_file_system(index))
-            action_export.triggered.connect(lambda: self.export_file(file_path))
-            menu.addAction(action_open)
-            menu.addAction(action_export)
-            menu.exec(self.file_tree.viewport().mapToGlobal(position))
+        # 硬體防呆：將 UI 的 0~100 映射為 PWM 的 25~50 Duty Cycle
+        # 100 / 4 = 25 的增量，基底為 25（最小安全音量） 
+        mapped_duty_cycle = int(value / 4 + 25) 
+        
+        # 呼叫後端模組進行實體更新
+        if hasattr(self.backend.buzzer, 'set_volume'):
+            self.backend.buzzer.set_volume(mapped_duty_cycle)
 
-    def open_file_system(self, index):
-        file_path = self.file_model.filePath(index)
-        import subprocess
-        try:
-            print(f"嘗試使用 VLC 播放: {file_path}")
-            subprocess.Popen(['vlc', file_path])
-        except Exception as e:
-            QMessageBox.warning(self, "錯誤", f"無法開啟 VLC: {e}")
-
-    def export_file(self, source_path):
-        is_dir = os.path.isdir(source_path)
-        if is_dir:
-            target_dir = QFileDialog.getExistingDirectory(self, "選擇匯出目的地")
-            if target_dir:
-                folder_name = os.path.basename(source_path)
-                full_target = os.path.join(target_dir, folder_name)
-                try:
-                    shutil.copytree(source_path, full_target)
-                    QMessageBox.information(self, "完成", f"資料夾已匯出至:\n{full_target}")
-                except Exception as e:
-                    QMessageBox.warning(self, "錯誤", f"匯出失敗: {e}")
-        else:
-            file_name = os.path.basename(source_path)
-            target_file, _ = QFileDialog.getSaveFileName(self, "另存新檔", file_name)
-            if target_file:
-                try:
-                    shutil.copy2(source_path, target_file)
-                    QMessageBox.information(self, "完成", f"檔案已匯出至:\n{target_file}")
-                except Exception as e:
-                    QMessageBox.warning(self, "錯誤", f"匯出失敗: {e}")
-
+   
     def closeEvent(self, event):
         reply = QMessageBox.question(self, '關閉確認', "確定要結束監控系統嗎？",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
@@ -550,8 +527,9 @@ class StandaloneWindow(QWidget):
 if __name__ == "__main__":
     # 使用 try-except 包裹整個主程式，作為最後一道防線
     try:
+        sys_config = load_app_config()
         app = QApplication(sys.argv)
-        backend = BackendSystem()
+        backend = BackendSystem(config_data=sys_config)
         window = StandaloneWindow(backend)
         window.show()
         sys.exit(app.exec())

@@ -17,22 +17,23 @@ from pathlib import Path
 
 import pose_estimator   
 
-# 是否寫成CSV
-RECORDING_DIAGRAM_TOCSV = True
 
-CONF_THRESHOLD = 0.45
-IOU_THRESHOLD = 0.25
-DRAW_SCALE = 0.2
-DRAW_THICKNESS = 1
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GREEN = (0, 255, 0)
+# 是否寫成CSV
+# RECORDING_DIAGRAM_TOCSV = True
+
+# CONF_THRESHOLD = 0.45
+# IOU_THRESHOLD = 0.25
+# DRAW_SCALE = 0.2
+# DRAW_THICKNESS = 1
+# WHITE = (255, 255, 255)
+# BLACK = (0, 0, 0)
+# GREEN = (0, 255, 0)
 
 STOP_EVENT = threading.Event()
 
 
 # 通用牆壁繪製函數
-def draw_wall_lines(img, center, ceiling_start, left_wall_end, right_wall_end, color=WHITE, thickness=DRAW_THICKNESS):
+def draw_wall_lines(img, center, ceiling_start, left_wall_end, right_wall_end, color=(255,255,255), thickness=1):
     """
     繪製牆壁線條並返回座標點
     """
@@ -73,8 +74,9 @@ def get_line_coordinates(start, end, list_pixels):
     
 class DetectThread(threading.Thread):
 
-    def __init__(self, cam_id, cam, model, model_lock, device, base_dir, fps, names, half, imgsz):
+    def __init__(self, cam_id, cam, model, model_lock, device, base_dir, fps, names, half, imgsz, config=None):
         super().__init__(daemon=True)
+        self.cfg = config if config else {}
 
         self.current_alert_state = False
         self.stop_event = STOP_EVENT
@@ -91,18 +93,41 @@ class DetectThread(threading.Thread):
         self.names = names
         self.half = half
         self.imgsz = imgsz
-
         self.stride = int(model.stride.max())
         
-        # ==================== [新增] 校正與裁切參數設定 ====================
+        # ***** 從設定檔載入參數 ******
+        # 預測的門檻
+        det_cfg = self.cfg.get('detection_params', {})
+        yolo_cfg = det_cfg.get('yolo', {})
+        self.conf_threshold = yolo_cfg.get('conf_threshold', 0.45)
+        self.iou_threshold = yolo_cfg.get('iou_threshold', 0.25)
+        # 錄製的時間長短與是否輸出 CSV
+        rec_cfg = det_cfg.get('recording', {})
+        self.pre_event_seconds = rec_cfg.get('pre_event_seconds', 10)
+        self.post_event_seconds = rec_cfg.get('post_event_seconds', 10)
+        self.record_diagram_to_csv = det_cfg.get('record_diagram_to_csv', False)
+        # 繪圖參數 
+        draw_cfg = self.cfg.get('drawing_params', {})
+        self.base_font_scale = draw_cfg.get('font_scale', 0.2)
+        self.base_line_thickness = draw_cfg.get('line_thickness', 1)
+        colors_cfg = draw_cfg.get('colors', {})
+        self.white = tuple(colors_cfg.get('white', [255, 255, 255]))
+        self.green = tuple(colors_cfg.get('green', [0, 255, 0]))
+        # 校正與裁切參數
         self.enable_calibration = False
-        self.calib_file = f'calibration_thermal_11.npz'  # 請確認路徑是否正確，或依 cam_id區分
-        
-        # 定義裁切範圍 (依照你的 cutBlack_resize.py 設定)
-        # 格式: (x_start, x_end, y_start, y_end)
-        self.crop_coords = (50, 550, 50, 420) 
-        # 統一標準解析度
+        self.calib_file = det_cfg.get('calibration_file', 'calibration_thermal_11.npz')
+        self.crop_coords = tuple(det_cfg.get('crop_coords', [50, 550, 50, 420]))
         self.standard_size = (640, 480)
+
+        # ==================== [新增] 校正與裁切參數設定 ====================
+        # self.enable_calibration = False
+        # self.calib_file = f'calibration_thermal_11.npz'  # 請確認路徑是否正確，或依 cam_id區分
+        
+        # # 定義裁切範圍 (依照你的 cutBlack_resize.py 設定)
+        # # 格式: (x_start, x_end, y_start, y_end)
+        # self.crop_coords = (50, 550, 50, 420) 
+        # # 統一標準解析度
+        # self.standard_size = (640, 480)
 
         if os.path.exists(self.calib_file):
             try:
@@ -129,27 +154,45 @@ class DetectThread(threading.Thread):
         self.scale_x = new_width / original_width
         self.scale_y = new_height / original_height
         # 根據縮放比例調整文字大小
-        self.scaled_text_size = DRAW_SCALE * self.scale_x  # 這裡調整文字大小
-        self.scaled_thickness = int(DRAW_THICKNESS)  # 根據比例調整文字粗細
-        self.raw_wall_config = None 
-        # 拍向深處的鏡頭
-        if self.cam_id == 0:
-            self.raw_wall_config = {'center': (90, 70), 
-                                    'ceiling': (90, 0), 
-                                    'left': (10, 120), 
-                                    'right': (160, 110)}
-        # 拍向門口的鏡頭
-        elif self.cam_id == 1:
-            self.raw_wall_config = {'center': (80, 70), 
-                                    'ceiling': (80, 0), 
-                                    'left': (10, 120), 
-                                    'right': (160, 110)}
+        self.scaled_text_size = self.base_font_scale * self.scale_x  # 這裡調整文字大小
+        self.scaled_thickness = int(self.base_line_thickness)  # 根據比例調整文字粗細
+        print(f'繪製的大小{self.scaled_text_size}, 繪製的粗細{self.scaled_thickness}')
+        
+        # self.raw_wall_config = None 
+        # 動態牆壁線設定
+        wall_cfgs = self.cfg.get('wall_configs', {})
+        cam_key = str(self.cam_id)
+        if cam_key in wall_cfgs:
+            raw_wall = wall_cfgs[cam_key]
+            print(f"👉 [Cam{self.cam_id}] 成功讀取 JSON 牆壁設定: {raw_wall['center']}") # 加入這行        
         else:
-            self.raw_wall_config = {'center': (105, 80), 
-                                    'ceiling': (105, 0), 
-                                    'left': (60, 120), 
-                                    'right': (160, 90)}
+            raw_wall = wall_cfgs.get('default', {'center': [105, 80], 'ceiling': [105, 0], 'left': [60, 120], 'right': [160, 90]})
+            print(f"⚠️ [Cam{self.cam_id}] 警告：讀不到設定，啟用預設牆壁座標: {raw_wall['center']}") # 加入這行
+        # # 拍向深處的鏡頭
+        # if self.cam_id == 0:
+        #     self.raw_wall_config = {'center': (90, 70), 
+        #                             'ceiling': (90, 0), 
+        #                             'left': (10, 120), 
+        #                             'right': (160, 110)}
+        # # 拍向門口的鏡頭
+        # elif self.cam_id == 1:
+        #     self.raw_wall_config = {'center': (80, 70), 
+        #                             'ceiling': (80, 0), 
+        #                             'left': (10, 120), 
+        #                             'right': (160, 110)}
+        # else:
+        #     self.raw_wall_config = {'center': (105, 80), 
+        #                             'ceiling': (105, 0), 
+        #                             'left': (60, 120), 
+        #                             'right': (160, 90)}
 
+        self.raw_wall_config = {
+            'center': tuple(raw_wall['center']),
+            'ceiling': tuple(raw_wall['ceiling']),
+            'left' : tuple(raw_wall['left']),
+            'right': tuple(raw_wall['right'])
+        }
+        
         # 建立一個 "縮放後" 的 Config 給 PoseEstimator 用
         self.dict_scaled_wall_config = {}
         if self.raw_wall_config:
@@ -162,16 +205,27 @@ class DetectThread(threading.Thread):
                                                            cam_id=cam_id, 
                                                            scale_ratio=self.scale_x,
                                                            wall_config=self.dict_scaled_wall_config,
-                                                           record_diagram_toCSV=RECORDING_DIAGRAM_TOCSV
+                                                           record_diagram_to_csv=self.record_diagram_to_csv,
+                                                           algo_cfg = self.cfg.get('algorithm_thresholds', {},
+                                                                                   )
                                                            )  # <---【新增】傳入縮放倍率 (約為 4.0))
         self.running = True
         self.prev_time = None
-        self.fps_records = []
+        # 改成序列的方式
+        self.fps_records = deque(maxlen=50)  # 使用 deque 確保只保留最新 50 筆，自動滾動
+        self.loaded_fps = fps                # 新增：專門儲存「有偵測到人時」的穩定 FPS，預設為系統給定的 fps
         self.sys_fps = fps
         self.frame_count = 0
 
-        self.pre_event_seconds = 10
-        self.post_event_seconds = 10
+        # ==================== [新增] FPS 延遲校正狀態機 ====================
+        # 若在校正完成前就觸發錄影，將使用啟動時傳入的保守 fps 當作備用基準 (來源：合理推論，避免除以零)
+        self.calibrated_fps = fps if fps > 0 else 15 
+        self.is_fps_calibrated = False   # 標記是否已經完成有人狀態的 FPS 校正
+        self.load_fps_buffer = []        # 用來收集 30 幀的單幀耗時
+        # ===================================================================
+
+        # self.pre_event_seconds = 10
+        # self.post_event_seconds = 10
         self.b_recording = False
         self.event_start_time = 0 
         self.eventWriter = None
@@ -185,6 +239,7 @@ class DetectThread(threading.Thread):
     def run(self):
         # 加入全域 Try-Catch，防止執行緒無聲無息死亡
         try:
+            self.prev_time = time.time()
             while self.running:
                 if self.stop_event.is_set():
                     break
@@ -208,7 +263,7 @@ class DetectThread(threading.Thread):
                     frame = cv2.resize(frame_cropped, self.standard_size, interpolation=cv2.INTER_LINEAR)
                 # ============================================================================
 
-                self.prev_time = time.time()
+                # self.prev_time = time.time()
                 img0 = frame.copy()
                 img = letterbox(img0, self.imgsz, stride=self.stride, auto=True)[0]
                 img = img[:, :, ::-1].transpose(2, 0, 1)
@@ -220,7 +275,7 @@ class DetectThread(threading.Thread):
 
                 with self.model_lock:
                     pred = self.model(img, augment=False)[0]
-                    pred = non_max_suppression_kpt(pred, conf_thres=CONF_THRESHOLD, iou_thres=IOU_THRESHOLD, classes=0, agnostic=False, kpt_label=True)
+                    pred = non_max_suppression_kpt(pred, conf_thres=self.conf_threshold, iou_thres=self.iou_threshold, classes=0, agnostic=False, kpt_label=True)
 
                 im0 = img0.copy()
 
@@ -237,7 +292,9 @@ class DetectThread(threading.Thread):
                         center_rescaled, 
                         ceiling_rescaled, 
                         left_rescaled, 
-                        right_rescaled
+                        right_rescaled,
+                        color=self.white, 
+                        thickness=self.scaled_thickness
                     )
                     # 獲取牆壁線上的座標點 (如果需要)
                     # left_wall_points = get_line_coordinates(center, left_wall_line, self.L_list_walls)
@@ -245,35 +302,74 @@ class DetectThread(threading.Thread):
                 ##################################################################################
 
                 # 計算 FPS =======================================================================
-                elapsed_time = time.time() - self.prev_time
-                self.sys_fps = 1 / elapsed_time if elapsed_time > 0 else 0
-                self.fps_records.append(self.sys_fps)
-                # 只保留最近 50 筆 計算平均FPS，當作序列長度
-                if len(self.fps_records) == 50:
-                    self.sys_fps = round(sum(self.fps_records) / len(self.fps_records))
-                    safe_fps = min(self.sys_fps, 15) 
-                    new_buffer_len = int(safe_fps * self.pre_event_seconds)
-                    if new_buffer_len != self.frame_buffer.maxlen:
-                        self.frame_buffer = deque(self.frame_buffer, maxlen=new_buffer_len)
+                current_time = time.time()
+                elapsed_time = current_time - self.prev_time
+                self.prev_time = current_time     # 更新 prev_time 給下一幀使用
+                current_frame_fps = 1 / elapsed_time if elapsed_time > 0 else 0
+                # self.sys_fps = 1 / elapsed_time if elapsed_time > 0 else 0
+                self.sys_fps = current_frame_fps
 
-                    self.pose_estimator.update_fps(self.sys_fps)
+                # self.fps_records.append(self.sys_fps)
+
+                # # 只保留最近 50 筆 計算平均FPS，當作序列長度
+                # if len(self.fps_records) == 50:
+                #     self.sys_fps = round(sum(self.fps_records) / len(self.fps_records))
+                #     # 加入合理範圍限制 (例如限制在 5 ~ 30 之間)
+                #     safe_fps = int(max(5, min(self.sys_fps, 30)))
+                #     # ******************************************
+                #     new_buffer_len = int(safe_fps * self.pre_event_seconds)
+                #     if new_buffer_len != self.frame_buffer.maxlen:
+                #         self.frame_buffer = deque(self.frame_buffer, maxlen=new_buffer_len)
+
+                #     self.pose_estimator.update_fps(self.sys_fps)
                     
                 # cv2.putText(im0, f'FPS: {round(self.sys_fps, 1)}', (int(10 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
                 # 在影像上顯示 FPS，這部分也應該根據縮放比例來調整
-                cv2.putText(im0, f'FPS: {round(self.sys_fps, 1)}', 
+                cv2.putText(im0, f'FPS: {round(current_frame_fps, 1)}', 
                             (int(10 * self.scale_x), int(100 * self.scale_y)),  # 調整位置
                             cv2.FONT_HERSHEY_SIMPLEX, 
                             self.scaled_text_size,  # 根據縮放比例調整字體大小
-                            WHITE, 
+                            self.white, 
                             self.scaled_thickness,  # 根據縮放比例調整粗細
                             cv2.LINE_AA)
                 
-
                 if len(pred[0]):
+                    # 【核心修改】偵測到人時的延遲校正機制
+                    if not self.is_fps_calibrated:
+                        self.load_fps_buffer.append(elapsed_time)
+                        
+                        # 收集滿 30 幀 (約 2~3 秒) 後進行結算與鎖定
+                        if len(self.load_fps_buffer) >= 50:
+                            avg_load_time = sum(self.load_fps_buffer) / 50.0
+                            # 防呆限制：鎖定在 5 ~ 30 FPS 之間
+                            self.calibrated_fps = int(max(5, min(1 / avg_load_time if avg_load_time > 0 else 15, 30)))
+                            self.is_fps_calibrated = True # 鎖定，後續不再計算
+                            
+                            print(f"[Cam{self.cam_id}] 系統負載 FPS 校正完成，鎖定為: {self.calibrated_fps} FPS")
+                    # # *************************************************************************
+                    # # 【新增核心邏輯】只有偵測到人，才將當下 FPS 加入陣列計算
+                    # self.fps_records.append(self.sys_fps)
+
+                    # # 只要收集到 10 幀「有人的畫面」，就開始動態更新平均 FPS，反應速度會比等 50 幀更快
+                    # if len(self.fps_records) >= 10:
+                    #     self.loaded_fps = sum(self.fps_records) / len(self.fps_records)
+                    #     safe_fps = int(max(5, min(self.loaded_fps, 30)))
+                        
+                            # 動態調整錄影前緩衝區 (pre_event_seconds) 大小
+                            new_buffer_len = int(self.calibrated_fps * self.pre_event_seconds)
+                            if new_buffer_len != self.frame_buffer.maxlen:
+                                # deque 重新賦值時，若新長度較短，會自動保留最新的畫面，丟棄最舊的畫面
+                                self.frame_buffer = deque(self.frame_buffer, maxlen=new_buffer_len)
+
+                            # 更新給 Pose Estimator 的時序參數
+                            self.pose_estimator.update_fps(self.calibrated_fps)
+
+                    # *************************************************************************
+
                     det = pred[0]
                     scale_coords(img.shape[2:], det[:, :4], im0.shape, kpt_label=True)
                     scale_coords(img.shape[2:], det[:, 6:], im0.shape, kpt_label=True, step=3)
-
+                    
                     det = det[:1]  # 只處理最高信心度的偵測結果
                     for det_index, (*xyxy, conf, cls) in enumerate(reversed(det[:, :6])):
                         c = int(cls)
@@ -284,19 +380,19 @@ class DetectThread(threading.Thread):
                         # 呼叫 Pose Estimator
                         _, R_vel, R_agl, avg_Ragl, L_vel, L_agl, avg_Lagl, hand_count, hand_alert_signal, near_ankle_state, leftAnkle_near_disL, rightAnkle_near_disL, leftAnkle_near_disR, rightAnkle_near_disR, nose_velocity, head_count, head_alert_signal, head_angle_change = self.pose_estimator.update_hand_info(kpts_list, self.frame_count)
                         # 調整文字顯示的位置，因為影像被裁切放大，需要調整
-                        cv2.putText(im0, f"R Vel: {R_vel}", (int(10 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, f"L Vel: {L_vel}", (int(10 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, f'Cam: {self.cam_id}', (int(80 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, f"Hand Count: {hand_count}", (int(10 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, "Hand Self Harm" if hand_alert_signal else " ", (int(80 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness* 2, cv2.LINE_AA)
-                        cv2.putText(im0, "near wall" if near_ankle_state else " ", (int(80 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness * 2, cv2.LINE_AA)
-                        cv2.putText(im0, f"Head Vel: {nose_velocity}", (int(10 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, f"Head Count: {head_count}", (int(10 * self.scale_x), int(50 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, "Head Self Harm" if head_alert_signal else " ", (int(80 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, GREEN, self.scaled_thickness* 2, cv2.LINE_AA)
+                        cv2.putText(im0, f"R Vel: {R_vel}", (int(10 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, f"L Vel: {L_vel}", (int(10 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, f'Cam: {self.cam_id}', (int(80 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, f"Hand Count: {hand_count}", (int(10 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, "Hand Self Harm" if hand_alert_signal else " ", (int(80 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness* 2, cv2.LINE_AA)
+                        cv2.putText(im0, "near wall" if near_ankle_state else " ", (int(80 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness * 2, cv2.LINE_AA)
+                        cv2.putText(im0, f"Head Vel: {nose_velocity}", (int(10 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, f"Head Count: {head_count}", (int(10 * self.scale_x), int(50 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, "Head Self Harm" if head_alert_signal else " ", (int(80 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness* 2, cv2.LINE_AA)
         
                         plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=2, kpt_label=True, kpts=kpts, steps=3, orig_shape=im0.shape[:2])
 
-                        self.frame_buffer.append(im0.copy())
+                        # self.frame_buffer.append(im0.copy())
                         # self.current_alert_state = hand_alert_signal or head_alert_signal
                         # 在UI上細分自傷狀態
                         alert_types = []
@@ -327,6 +423,7 @@ class DetectThread(threading.Thread):
 
                                 # 組合當日的完整路徑
                                 current_save_dir = self.base_dir / date_str
+
                                 if not current_save_dir.exists():
                                     current_save_dir.mkdir(parents=True, exist_ok=True)
                                     print(f"[系統] 跨日或新啟動，建立新資料夾: {current_save_dir}")
@@ -335,36 +432,39 @@ class DetectThread(threading.Thread):
                                 
                                 # self.temp_cam_path = str(self.final_cam_path) + ".temp"
                                 # ▼▼▼ 修正：改成使用 current_save_dir (當日資料夾) ▼▼▼
-                                self.final_cam_path = current_save_dir / f'{filename_base}.mp4'
-                                self.temp_cam_path = str(current_save_dir / f'{filename_base}_TEMP.mp4')
+                                self.final_cam_path = str(current_save_dir / f'{filename_base}.mp4')
                                 
                                 h, w = im0.shape[:2]
-                                record_fps = self.sys_fps if self.sys_fps > 0 else 10
+                                # record_fps = self.sys_fps if self.sys_fps > 0 else 10
+                                # record_fps = int(max(5, min(self.sys_fps, 30))) # 延續前次修復的防呆機制
                                 # record_fps = int(max(self.sys_fps, 10))
+                                # 【修改】使用校正後的 FPS 作為寫入速度
+                                record_fps = self.calibrated_fps
 
                                 # print(f"[Cam{self.cam_id}] 建立錄影檔: {self.temp_cam_path} (FPS: {record_fps})")
 
                                 # 確保路徑資料夾存在
-                                if not os.path.exists(os.path.dirname(self.temp_cam_path)):
-                                    print(f"警告：資料夾不存在，嘗試建立：{os.path.dirname(self.temp_cam_path)}")
-                                    os.makedirs(os.path.dirname(self.temp_cam_path), exist_ok=True)
+                                if not os.path.exists(os.path.dirname(self.final_cam_path)):
+                                    print(f"警告：資料夾不存在，嘗試建立：{os.path.dirname(self.final_cam_path)}")
+                                    os.makedirs(os.path.dirname(self.final_cam_path), exist_ok=True)
 
-                                self.eventWriter = cv2.VideoWriter(self.temp_cam_path, cv2.VideoWriter_fourcc(*'mp4v'), record_fps, (w, h))
-                                
+                                self.eventWriter = cv2.VideoWriter(self.final_cam_path, cv2.VideoWriter_fourcc(*'mp4v'), record_fps, (w, h))
+                                print(f'儲存成影片的FPS為: {record_fps}')
                                 # 寫入緩衝區影像
                                 history_frames = list(self.frame_buffer)
                                 for hist_frame in history_frames:
                                     if hist_frame is not None:
                                         self.eventWriter.write(hist_frame)
 
-                        if self.b_recording and self.eventWriter is not None:
-                            self.eventWriter.write(im0)
+                self.frame_buffer.append(im0.copy())
+                if self.b_recording and self.eventWriter is not None:
+                    self.eventWriter.write(im0)
 
-                            if (time.time() - self.event_start_time) > self.post_event_seconds: 
-                                # print(f"[Cam{self.cam_id}] 事件結束，停止錄影。")
-                                self.stop_recording_and_save() # 呼叫存檔函式
+                    if (time.time() - self.event_start_time) > self.post_event_seconds: 
+                        # print(f"[Cam{self.cam_id}] 事件結束，停止錄影。")
+                        self.stop_recording_and_save() # 呼叫存檔函式
 
-                
+        
                 # 推送影像
                 if self.shared_frame_queue.full():
                     try: self.shared_frame_queue.get_nowait()
@@ -391,20 +491,7 @@ class DetectThread(threading.Thread):
         if self.eventWriter is not None:
             self.eventWriter.release()
             self.eventWriter = None
-            # print(f"[Cam{self.cam_id}] 錄影結束，準備更名...") # Debug 訊息
-            # 嘗試將 .temp 改名為 .mp4
-            try:
-                if self.temp_cam_path and os.path.exists(self.temp_cam_path):
-
-                    if os.path.exists(self.final_cam_path):
-                        os.remove(self.final_cam_path)
-
-                    os.rename(self.temp_cam_path, str(self.final_cam_path))
-                    # print(f"影片救援成功/已儲存: {self.final_cam_path}")
-                else:
-                    print(f"錯誤：找不到暫存檔 {self.temp_cam_path}")
-            except Exception as e:
-                print(f"影片存檔失敗: {e}")
+            print(f"[Cam{self.cam_id}] 影片已錄製完成並儲存: {self.final_cam_path}")            
 
     # ==========================================
     # 重置 AI 狀態

@@ -1,0 +1,502 @@
+[2026-03-07 13:53:00] [INFO] 系統啟動 (System Startup)
+[2026-03-07 13:53:00] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 13:53:00] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 13:53:01] [ERROR] Thermal 模型載入失敗: [Errno 2] No such file or directory: '你的yolov11_pose模型檔名.pt'
+[2026-03-07 13:53:01] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 599, in <module>
+    backend = BackendSystem()
+  File "Server_UI.py", line 158, in __init__
+    raise e
+  File "Server_UI.py", line 150, in __init__
+    self.model = YOLO('你的yolov11_pose模型檔名.pt')
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/models/yolo/model.py", line 76, in __init__
+    super().__init__(model=model, task=task, verbose=verbose)
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/engine/model.py", line 144, in __init__
+    self._load(model, task=task)
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/engine/model.py", line 283, in _load
+    self.model, self.ckpt = load_checkpoint(weights)
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/nn/tasks.py", line 1515, in load_checkpoint
+    ckpt, weight = torch_safe_load(weight)  # load ckpt
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/nn/tasks.py", line 1463, in torch_safe_load
+    ckpt = torch_load(file, map_location="cpu")
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/utils/patches.py", line 178, in torch_load
+    return torch.load(*args, **kwargs)
+  File "/home/aiot/.local/lib/python3.8/site-packages/torch/serialization.py", line 791, in load
+    with _open_file_like(f, 'rb') as opened_file:
+  File "/home/aiot/.local/lib/python3.8/site-packages/torch/serialization.py", line 271, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+  File "/home/aiot/.local/lib/python3.8/site-packages/torch/serialization.py", line 252, in __init__
+    super().__init__(open(name, mode))
+FileNotFoundError: [Errno 2] No such file or directory: '你的yolov11_pose模型檔名.pt'
+
+[2026-03-07 13:55:03] [INFO] 系統啟動 (System Startup)
+[2026-03-07 13:55:03] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 13:55:03] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 13:55:04] [ERROR] Thermal 模型載入失敗: [Errno 2] No such file or directory: 'yolo11m_thermalPose.pt'
+[2026-03-07 13:55:04] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 599, in <module>
+    backend = BackendSystem()
+  File "Server_UI.py", line 158, in __init__
+    raise e
+  File "Server_UI.py", line 150, in __init__
+    self.model = YOLO('yolo11m_thermalPose.pt')
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/models/yolo/model.py", line 76, in __init__
+    super().__init__(model=model, task=task, verbose=verbose)
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/engine/model.py", line 144, in __init__
+    self._load(model, task=task)
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/engine/model.py", line 283, in _load
+    self.model, self.ckpt = load_checkpoint(weights)
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/nn/tasks.py", line 1515, in load_checkpoint
+    ckpt, weight = torch_safe_load(weight)  # load ckpt
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/nn/tasks.py", line 1463, in torch_safe_load
+    ckpt = torch_load(file, map_location="cpu")
+  File "/home/aiot/.local/lib/python3.8/site-packages/ultralytics/utils/patches.py", line 178, in torch_load
+    return torch.load(*args, **kwargs)
+  File "/home/aiot/.local/lib/python3.8/site-packages/torch/serialization.py", line 791, in load
+    with _open_file_like(f, 'rb') as opened_file:
+  File "/home/aiot/.local/lib/python3.8/site-packages/torch/serialization.py", line 271, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+  File "/home/aiot/.local/lib/python3.8/site-packages/torch/serialization.py", line 252, in __init__
+    super().__init__(open(name, mode))
+FileNotFoundError: [Errno 2] No such file or directory: 'yolo11m_thermalPose.pt'
+
+[2026-03-07 13:55:19] [INFO] 系統啟動 (System Startup)
+[2026-03-07 13:55:19] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 13:55:19] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 13:55:21] [INFO] Thermal 模型載入成功
+[2026-03-07 13:55:21] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 13:55:21] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 599, in <module>
+    backend = BackendSystem()
+  File "Server_UI.py", line 183, in __init__
+    self.device.type != 'cpu', imgsz=640)
+AttributeError: 'str' object has no attribute 'type'
+
+[2026-03-07 14:00:52] [INFO] 系統啟動 (System Startup)
+[2026-03-07 14:00:53] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 14:00:53] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 14:00:54] [INFO] Thermal 模型載入成功
+[2026-03-07 14:00:54] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 14:03:43] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 14:03:43] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 14:07:43] [INFO] 系統啟動 (System Startup)
+[2026-03-07 14:07:43] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 14:07:43] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 14:07:44] [INFO] Thermal 模型載入成功
+[2026-03-07 14:07:44] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 14:08:41] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 14:08:41] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 14:08:49] [INFO] 系統啟動 (System Startup)
+[2026-03-07 14:08:49] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 14:08:49] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 14:08:50] [INFO] Thermal 模型載入成功
+[2026-03-07 14:08:50] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 14:17:59] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 14:17:59] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 14:18:09] [INFO] 系統啟動 (System Startup)
+[2026-03-07 14:18:09] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 14:18:09] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 14:18:10] [INFO] Thermal 模型載入成功
+[2026-03-07 14:18:10] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 14:29:27] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 14:29:27] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 14:29:35] [INFO] 系統啟動 (System Startup)
+[2026-03-07 14:29:35] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 14:29:35] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 14:29:36] [INFO] Thermal 模型載入成功
+[2026-03-07 14:29:36] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 14:30:44] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 14:30:44] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 14:31:36] [INFO] 系統啟動 (System Startup)
+[2026-03-07 14:31:36] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 14:31:36] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 14:31:43] [INFO] Thermal 模型載入成功
+[2026-03-07 14:31:43] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 14:32:16] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 14:32:16] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 14:51:03] [INFO] 系統啟動 (System Startup)
+[2026-03-07 14:51:03] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 14:51:03] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 14:51:09] [INFO] Thermal 模型載入成功
+[2026-03-07 14:51:09] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 14:51:58] [INFO] 偵測到行為: 發生頭部自傷行為 (發聲狀態: True)
+[2026-03-07 14:52:04] [INFO] 使用者手動重置警報
+[2026-03-07 14:52:04] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 14:55:49] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 14:55:54] [INFO] 使用者手動重置警報
+[2026-03-07 14:55:54] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 14:57:21] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 14:57:21] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 15:30:57] [INFO] 系統啟動 (System Startup)
+[2026-03-07 15:30:57] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 15:30:57] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 15:31:03] [INFO] Thermal 模型載入成功
+[2026-03-07 15:31:03] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 15:42:25] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 15:42:25] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 15:45:24] [INFO] 系統啟動 (System Startup)
+[2026-03-07 15:45:24] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 15:45:24] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 15:45:30] [INFO] Thermal 模型載入成功
+[2026-03-07 15:45:30] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 16:15:09] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 16:15:09] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 16:57:43] [INFO] 系統啟動 (System Startup)
+[2026-03-07 16:57:43] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 16:57:43] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 16:57:50] [INFO] Thermal 模型載入成功
+[2026-03-07 16:57:50] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 16:59:17] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 16:59:19] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 16:59:33] [INFO] 系統啟動 (System Startup)
+[2026-03-07 16:59:33] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 16:59:33] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 16:59:40] [INFO] Thermal 模型載入成功
+[2026-03-07 16:59:40] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 17:00:08] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 17:00:18] [INFO] 使用者手動重置警報
+[2026-03-07 17:00:18] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 17:09:58] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 17:09:58] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 17:10:08] [INFO] 系統啟動 (System Startup)
+[2026-03-07 17:10:09] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 17:10:09] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 17:10:15] [INFO] Thermal 模型載入成功
+[2026-03-07 17:10:15] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 17:10:38] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 17:10:43] [INFO] 使用者手動重置警報
+[2026-03-07 17:10:43] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 17:12:04] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 17:12:04] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 17:12:14] [INFO] 系統啟動 (System Startup)
+[2026-03-07 17:12:14] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 17:12:14] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 17:12:20] [INFO] Thermal 模型載入成功
+[2026-03-07 17:12:20] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 17:12:57] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 17:13:02] [INFO] 使用者手動重置警報
+[2026-03-07 17:13:02] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 17:14:04] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 17:14:05] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 17:14:14] [INFO] 系統啟動 (System Startup)
+[2026-03-07 17:14:14] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 17:14:14] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 17:14:20] [INFO] Thermal 模型載入成功
+[2026-03-07 17:14:20] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 17:14:45] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 17:14:50] [INFO] 使用者手動重置警報
+[2026-03-07 17:14:50] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 17:14:56] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 17:15:01] [INFO] 使用者手動重置警報
+[2026-03-07 17:15:01] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 17:16:45] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 17:16:45] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 17:36:05] [INFO] 系統啟動 (System Startup)
+[2026-03-07 17:36:05] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 17:36:05] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 17:36:11] [INFO] Thermal 模型載入成功
+[2026-03-07 17:36:11] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 17:37:18] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 17:37:18] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 17:37:27] [INFO] 系統啟動 (System Startup)
+[2026-03-07 17:37:27] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 17:37:27] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 17:37:33] [INFO] Thermal 模型載入成功
+[2026-03-07 17:37:33] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 17:37:58] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 17:38:04] [INFO] 使用者手動重置警報
+[2026-03-07 17:38:04] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 17:38:28] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 17:38:33] [INFO] 使用者手動重置警報
+[2026-03-07 17:38:33] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 17:38:47] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 17:38:51] [INFO] 使用者手動重置警報
+[2026-03-07 17:38:51] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 19:00:54] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:00:56] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:01:07] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:01:07] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:01:07] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:01:13] [INFO] Thermal 模型載入成功
+[2026-03-07 19:01:13] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:13:10] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:13:11] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:13:21] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:13:21] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:13:21] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:13:27] [INFO] Thermal 模型載入成功
+[2026-03-07 19:13:27] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:13:55] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 19:14:06] [INFO] 使用者手動重置警報
+[2026-03-07 19:14:06] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 19:21:07] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:21:08] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:21:16] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:21:16] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:21:16] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:21:22] [INFO] Thermal 模型載入成功
+[2026-03-07 19:21:22] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:23:16] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:23:17] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:23:27] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:23:27] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:23:27] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:23:34] [INFO] Thermal 模型載入成功
+[2026-03-07 19:23:34] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:24:39] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:24:40] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:24:52] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:24:52] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:24:52] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:24:59] [INFO] Thermal 模型載入成功
+[2026-03-07 19:24:59] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:27:00] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:27:01] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:27:08] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:27:08] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:27:08] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:27:15] [INFO] Thermal 模型載入成功
+[2026-03-07 19:27:15] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:28:12] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:28:13] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:29:03] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:29:03] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:29:03] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:29:09] [INFO] Thermal 模型載入成功
+[2026-03-07 19:29:09] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:29:32] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 19:29:42] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-07 19:29:42] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-07 19:29:44] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-07 19:29:45] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-07 19:30:13] [INFO] 使用者手動重置警報
+[2026-03-07 19:30:13] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 19:41:05] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:41:06] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:41:14] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:41:14] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:41:14] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:41:20] [INFO] Thermal 模型載入成功
+[2026-03-07 19:41:20] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:45:12] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:45:13] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:46:05] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:46:06] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:46:06] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:46:12] [INFO] Thermal 模型載入成功
+[2026-03-07 19:46:12] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:47:02] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 19:47:02] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 19:55:58] [INFO] 系統啟動 (System Startup)
+[2026-03-07 19:55:58] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 19:55:58] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 19:56:05] [INFO] Thermal 模型載入成功
+[2026-03-07 19:56:05] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 19:56:28] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 19:56:36] [INFO] 使用者手動重置警報
+[2026-03-07 19:56:36] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 20:00:28] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 20:00:30] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 20:00:41] [INFO] 系統啟動 (System Startup)
+[2026-03-07 20:00:41] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 20:00:41] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 20:00:48] [INFO] Thermal 模型載入成功
+[2026-03-07 20:00:48] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 20:01:38] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 20:01:45] [INFO] 使用者手動重置警報
+[2026-03-07 20:01:45] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 20:02:50] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 20:02:51] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 20:02:59] [INFO] 系統啟動 (System Startup)
+[2026-03-07 20:02:59] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 20:02:59] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 20:03:06] [INFO] Thermal 模型載入成功
+[2026-03-07 20:03:06] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 20:03:30] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 20:03:45] [INFO] 使用者手動重置警報
+[2026-03-07 20:03:45] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 20:19:30] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 20:19:31] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 20:19:42] [INFO] 系統啟動 (System Startup)
+[2026-03-07 20:19:43] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 20:19:43] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 20:19:49] [INFO] Thermal 模型載入成功
+[2026-03-07 20:19:49] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 20:20:06] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 20:20:14] [INFO] 使用者手動重置警報
+[2026-03-07 20:20:14] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 20:21:57] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 20:22:04] [INFO] 使用者手動重置警報
+[2026-03-07 20:22:04] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 20:22:38] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 20:22:38] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 20:23:12] [INFO] 系統啟動 (System Startup)
+[2026-03-07 20:23:12] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 20:23:12] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 20:23:19] [INFO] Thermal 模型載入成功
+[2026-03-07 20:23:19] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 20:23:37] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 20:23:45] [INFO] 使用者手動重置警報
+[2026-03-07 20:23:45] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 20:28:12] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 20:28:20] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-07 20:28:20] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-07 20:28:22] [INFO] 使用者手動重置警報
+[2026-03-07 20:28:22] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 21:00:39] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 21:00:39] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 21:00:48] [INFO] 系統啟動 (System Startup)
+[2026-03-07 21:00:49] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 21:00:49] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 21:00:55] [INFO] Thermal 模型載入成功
+[2026-03-07 21:00:55] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 21:12:04] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 21:12:04] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 21:13:08] [INFO] 系統啟動 (System Startup)
+[2026-03-07 21:13:08] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 21:13:08] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 21:13:15] [INFO] Thermal 模型載入成功
+[2026-03-07 21:13:15] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 21:13:51] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 21:14:00] [INFO] 使用者手動重置警報
+[2026-03-07 21:14:00] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 21:21:15] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 21:21:24] [INFO] 使用者手動重置警報
+[2026-03-07 21:21:24] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 21:57:14] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 21:57:15] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 22:31:46] [INFO] 系統啟動 (System Startup)
+[2026-03-07 22:31:46] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 22:31:46] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 22:31:46] [ERROR] Thermal 模型載入失敗: No module named 'pycuda'
+[2026-03-07 22:31:46] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 613, in <module>
+    backend = BackendSystem()
+  File "Server_UI.py", line 172, in __init__
+    raise e
+  File "Server_UI.py", line 148, in __init__
+    from trt_wrapper import TRTWrapper  # 引入我們寫好的 TensorRT 封裝類別
+  File "/home/aiot/Project/trt_wrapper.py", line 2, in <module>
+    import pycuda.driver as cuda
+ModuleNotFoundError: No module named 'pycuda'
+
+[2026-03-07 22:36:09] [INFO] 系統啟動 (System Startup)
+[2026-03-07 22:36:09] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 22:36:09] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 22:36:09] [ERROR] Thermal 模型載入失敗: 'ABCMeta' object is not subscriptable
+[2026-03-07 22:36:09] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 613, in <module>
+    backend = BackendSystem()
+  File "Server_UI.py", line 172, in __init__
+    raise e
+  File "Server_UI.py", line 148, in __init__
+    from trt_wrapper import TRTWrapper  # 引入我們寫好的 TensorRT 封裝類別
+  File "/home/aiot/Project/trt_wrapper.py", line 3, in <module>
+    import pycuda.autoinit  # 負責初始化 CUDA 驅動
+  File "/home/aiot/.local/lib/python3.8/site-packages/pycuda/autoinit.py", line 11, in <module>
+    from pycuda.tools import make_default_context
+  File "/home/aiot/.local/lib/python3.8/site-packages/pycuda/tools.py", line 36, in <module>
+    from pycuda.compyte.dtypes import (  # noqa: F401
+  File "/home/aiot/.local/lib/python3.8/site-packages/pycuda/compyte/dtypes.py", line 42, in <module>
+    class DTypeRegistry:
+  File "/home/aiot/.local/lib/python3.8/site-packages/pycuda/compyte/dtypes.py", line 49, in DTypeRegistry
+    names: str | Sequence[str],
+TypeError: 'ABCMeta' object is not subscriptable
+
+[2026-03-07 22:42:16] [INFO] 系統啟動 (System Startup)
+[2026-03-07 22:42:16] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 22:42:16] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 22:42:18] [ERROR] Thermal 模型載入失敗: 'BackendSystem' object has no attribute 'device'
+[2026-03-07 22:42:18] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 613, in <module>
+    backend = BackendSystem()
+  File "Server_UI.py", line 172, in __init__
+    raise e
+  File "Server_UI.py", line 164, in __init__
+    dummy_input = torch.zeros(1, 3, 640, 640).to(self.device).half()
+AttributeError: 'BackendSystem' object has no attribute 'device'
+
+[2026-03-07 22:45:38] [INFO] 系統啟動 (System Startup)
+[2026-03-07 22:45:39] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 22:45:39] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 22:45:43] [INFO] Thermal 模型載入成功
+[2026-03-07 22:45:43] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 22:45:43] [ERROR] 主程式啟動失敗:
+Traceback (most recent call last):
+  File "Server_UI.py", line 613, in <module>
+    backend = BackendSystem()
+  File "Server_UI.py", line 195, in __init__
+    t = DetectThread(i, cam, self.model, self.model_lock, self.device,
+  File "/home/aiot/Project/detect_thread.py", line 95, in __init__
+    self.stride = int(model.stride.max())
+AttributeError: 'TRTWrapper' object has no attribute 'stride'
+
+[2026-03-07 22:48:32] [INFO] 系統啟動 (System Startup)
+[2026-03-07 22:48:33] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 22:48:33] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 22:48:38] [INFO] Thermal 模型載入成功
+[2026-03-07 22:48:38] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 22:52:13] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 22:52:13] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 22:52:24] [INFO] 系統啟動 (System Startup)
+[2026-03-07 22:52:25] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 22:52:25] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 22:52:30] [INFO] Thermal 模型載入成功
+[2026-03-07 22:52:30] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 22:56:10] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 22:56:10] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 22:56:26] [INFO] 系統啟動 (System Startup)
+[2026-03-07 22:56:26] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 22:56:26] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 22:56:31] [INFO] Thermal 模型載入成功
+[2026-03-07 22:56:31] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 22:57:19] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 22:57:19] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 22:57:26] [INFO] 系統啟動 (System Startup)
+[2026-03-07 22:57:27] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 22:57:27] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 22:57:32] [INFO] Thermal 模型載入成功
+[2026-03-07 22:57:32] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 23:00:19] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 23:00:19] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 23:01:08] [INFO] 系統啟動 (System Startup)
+[2026-03-07 23:01:08] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 23:01:08] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 23:01:12] [INFO] Thermal 模型載入成功
+[2026-03-07 23:01:12] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 23:01:39] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 23:01:39] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 23:05:10] [INFO] 系統啟動 (System Startup)
+[2026-03-07 23:05:11] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 23:05:11] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 23:05:13] [INFO] Thermal 模型載入成功
+[2026-03-07 23:05:13] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 23:05:32] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 23:05:33] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 23:07:08] [INFO] 系統啟動 (System Startup)
+[2026-03-07 23:07:09] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 23:07:09] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 23:07:15] [INFO] Thermal 模型載入成功
+[2026-03-07 23:07:15] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 23:07:24] [INFO] 系統正在關閉 (Backend Stopping)...
+[2026-03-07 23:07:24] [INFO] 系統已安全中止 (Shutdown Complete)
+[2026-03-07 23:09:40] [INFO] 系統啟動 (System Startup)
+[2026-03-07 23:09:40] [INFO] 蜂鳴器硬體 (Pin 32) 初始化完成。
+[2026-03-07 23:09:40] [INFO] 獨立蜂鳴器模組已掛載
+[2026-03-07 23:09:46] [INFO] Thermal 模型載入成功
+[2026-03-07 23:09:46] [INFO] 啟動相機接收 Port: 8000, 8001
+[2026-03-07 23:10:18] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: True)
+[2026-03-07 23:10:29] [INFO] 使用者手動重置警報
+[2026-03-07 23:10:29] [INFO] 執行後端警報重置 (Reset Alert)
+[2026-03-07 23:10:30] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-07 23:12:54] [INFO] 偵測到行為: 發生手部自傷行為 (發聲狀態: False)
+[2026-03-07 23:14:37] [INFO] 護理人員操作：開啟蜂鳴器硬體功能
+[2026-03-07 23:14:38] [INFO] 護理人員操作：靜音蜂鳴器硬體功能
+[2026-03-07 23:14:39] [INFO] 使用者手動重置警報
+[2026-03-07 23:14:39] [INFO] 執行後端警報重置 (Reset Alert)
