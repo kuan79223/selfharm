@@ -74,7 +74,7 @@ class BuzzerController:
     def stop_alarm_from_timer(self):    
         self._log('定時器時間到，自動停止蜂鳴器。')
         self.stop_alarm()
-
+    
     def stop_alarm(self):
         """停止警報音 (執行緒安全)"""
         with self.lock:
