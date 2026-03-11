@@ -446,7 +446,7 @@ class StandaloneWindow(QWidget):
             # 若目前正在警報中，恢復發聲
             if self.ui_alert_active:
                 duration = self.backend.config.get('alert', {}).get('buzzer_duration_sec', 180)
-                self.backend.buzzer.start_alarm()
+                self.backend.buzzer.start_alarm(duration_sec=duration)
         else:
             # 狀態：靜音
             self.btn_buzzer_toggle.setText("🔇 蜂鳴器：已靜音\n(點擊開啟)")

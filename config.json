@@ -3,7 +3,7 @@
     "alarm_state_init": false
   },
   "alert": {
-    "buzzer_duration_sec": 5
+    "buzzer_duration_sec": 10
   },
   "algorithm_thresholds": {
     "wrist_threshold_dist": 450,
@@ -14,14 +14,14 @@
   "detection_params": {
     "calibration_file": "calibration_thermal_11.npz",
     "crop_coords": [50, 550, 50, 420],
-    "record_diagram_to_csv": true,
+    "record_diagram_to_csv": false,
     "yolo": {
       "conf_threshold": 0.45,
       "iou_threshold": 0.25
     },
     "recording": {
       "pre_event_seconds": 10,
-      "post_event_seconds": 10
+      "post_event_seconds": 5
     }
   },
   "drawing_params": {

@@ -71,7 +71,43 @@ def get_line_coordinates(start, end, list_pixels):
     # print(list_pixels)
     return list_pixels
 
-    
+
+class VideoRecordsThread(threading.Thread):
+    '''
+        負責在背景獨立將 Queue 中的影像寫入硬碟，
+        避免龐大的I/O 操作阻塞主推論與UI執行緒。
+    '''
+    def __init__(self, filepath, fps, size, pre_frames, record_queue, cam_id):
+        super().__init__(daemon=True)
+        self.filepath = filepath
+        self.fps = fps
+        self.size = size
+        self.pre_frames = pre_frames
+        self.record_queue = record_queue
+        self.cam_id = cam_id
+
+    def run(self):
+        writer = None
+        try:
+            writer = cv2.VideoWriter(self.filepath, cv2.VideoWriter_fourcc(*'mp4v'), self.fps, self.size)
+            # 優先寫入預錄緩衝區(Pre-event frames)
+            for frame in self.pre_frames:
+                writer.write(frame)
+
+            while True:
+                frame = self.record_queue.get()
+                if frame is None:  # 收到終止信號
+                    break   
+                writer.write(frame)
+            print(f'[Cam{self.cam_id}] 影片已於背景錄製完成並儲存: {self.filepath}')
+        except Exception as e:
+            print(f'!!! [Cam{self.cam_id}] 背影錄影發生錯誤: {e} !!!')
+            traceback.print_exc()
+        finally:
+            if writer is not None:
+                writer.release()
+
+
 class DetectThread(threading.Thread):
 
     def __init__(self, cam_id, cam, model, model_lock, device, base_dir, fps, names, half, imgsz, config=None):
@@ -228,8 +264,11 @@ class DetectThread(threading.Thread):
         # self.post_event_seconds = 10
         self.b_recording = False
         self.event_start_time = 0 
-        self.eventWriter = None
-        
+        # self.eventWriter = None
+        # 實例化背景錄影類別 *************
+        self.record_thread = None
+        self.record_queue = queue.Queue()
+        # *******************************
         # 初始化路徑變數
         self.final_cam_path = None
         self.temp_cam_path = None
@@ -429,52 +468,60 @@ class DetectThread(threading.Thread):
                                     print(f"[系統] 跨日或新啟動，建立新資料夾: {current_save_dir}")
                     
                                 filename_base = f'Event_Cam{self.cam_id}_{timestamp}'
-                                
-                                # self.temp_cam_path = str(self.final_cam_path) + ".temp"
-                                # ▼▼▼ 修正：改成使用 current_save_dir (當日資料夾) ▼▼▼
                                 self.final_cam_path = str(current_save_dir / f'{filename_base}.mp4')
                                 
                                 h, w = im0.shape[:2]
-                                # record_fps = self.sys_fps if self.sys_fps > 0 else 10
-                                # record_fps = int(max(5, min(self.sys_fps, 30))) # 延續前次修復的防呆機制
-                                # record_fps = int(max(self.sys_fps, 10))
-                                # 【修改】使用校正後的 FPS 作為寫入速度
                                 record_fps = self.calibrated_fps
-
-                                # print(f"[Cam{self.cam_id}] 建立錄影檔: {self.temp_cam_path} (FPS: {record_fps})")
 
                                 # 確保路徑資料夾存在
                                 if not os.path.exists(os.path.dirname(self.final_cam_path)):
                                     print(f"警告：資料夾不存在，嘗試建立：{os.path.dirname(self.final_cam_path)}")
                                     os.makedirs(os.path.dirname(self.final_cam_path), exist_ok=True)
-
-                                self.eventWriter = cv2.VideoWriter(self.final_cam_path, cv2.VideoWriter_fourcc(*'mp4v'), record_fps, (w, h))
-                                print(f'儲存成影片的FPS為: {record_fps}')
-                                # 寫入緩衝區影像
+                                
                                 history_frames = list(self.frame_buffer)
-                                for hist_frame in history_frames:
-                                    if hist_frame is not None:
-                                        self.eventWriter.write(hist_frame)
+                                self.record_queue = queue.Queue()
+
+                                self.record_thread = VideoRecordsThread(
+                                    filepath=self.final_cam_path, 
+                                    fps=record_fps, 
+                                    size=(w, h), 
+                                    pre_frames=history_frames, 
+                                    record_queue=self.record_queue, 
+                                    cam_id=self.cam_id
+                                    )
+                                self.record_thread.start()
+                                print(f'[Cam{self.cam_id}] 背景錄影執行緒啟動 (FPS: {record_fps})')
+                                
+                                # self.eventWriter = cv2.VideoWriter(self.final_cam_path, cv2.VideoWriter_fourcc(*'mp4v'), record_fps, (w, h))
+                                # print(f'儲存成影片的FPS為: {record_fps}')
+                                # 寫入緩衝區影像
+                                # history_frames = list(self.frame_buffer)
+                                # for hist_frame in history_frames:
+                                #     if hist_frame is not None:
+                                #         self.eventWriter.write(hist_frame)
+
 
                 self.frame_buffer.append(im0.copy())
-                if self.b_recording and self.eventWriter is not None:
-                    self.eventWriter.write(im0)
-
+                # if self.b_recording and self.eventWriter is not None:
+                #     self.eventWriter.write(im0)
+                if self.b_recording and self.record_thread is not None:
+                    # 必須使用 copy() 防止被下一迴圈覆寫
+                    self.record_queue.put(im0.copy())
+                    # *******************************
                     if (time.time() - self.event_start_time) > self.post_event_seconds: 
                         # print(f"[Cam{self.cam_id}] 事件結束，停止錄影。")
                         self.stop_recording_and_save() # 呼叫存檔函式
 
-        
                 # 推送影像
                 if self.shared_frame_queue.full():
-                    try: self.shared_frame_queue.get_nowait()
-                    except queue.Empty: pass
-                # self.shared_frame_queue.put(im0)
+                    try: 
+                        self.shared_frame_queue.get_nowait()
+                    except queue.Empty: 
+                        pass
                 self.shared_frame_queue.put((im0, self.current_alert_state))
                 self.frame_count += 1
         
         except Exception as e:
-            # 這是重點：如果發生錯誤，印出來，不要只卡住畫面
             print(f"!!! Cam{self.cam_id} DetectThread 發生嚴重錯誤 !!!")
             traceback.print_exc()
         
@@ -488,10 +535,14 @@ class DetectThread(threading.Thread):
     # ==========================================
     def stop_recording_and_save(self):
         self.b_recording = False
-        if self.eventWriter is not None:
-            self.eventWriter.release()
-            self.eventWriter = None
-            print(f"[Cam{self.cam_id}] 影片已錄製完成並儲存: {self.final_cam_path}")            
+        if getattr(self, 'record_thread', None) is not None:
+            self.record_queue.put(None)  # 放進None 作為結束標記
+            self.recorder_thread = None  # 解除參照，讓下次可順利建立執行緒
+            print(f'[Cam{self.cam_id}] 偵測事件結束，已發送背景寫入結束信號。')
+        # if self.eventWriter is not None:
+        #     self.eventWriter.release()
+        #     self.eventWriter = None
+        #     print(f"[Cam{self.cam_id}] 影片已錄製完成並儲存: {self.final_cam_path}")            
 
     # ==========================================
     # 重置 AI 狀態
