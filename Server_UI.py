@@ -250,7 +250,9 @@ class StandaloneWindow(QWidget):
         # 系統狀態變數
         self.ui_alert_active = False 
         self.current_date_str = datetime.now().strftime("%Y/%m/%d")
-        
+        #【新增】記錄警報觸發的絕對時間點
+        self.alert_start_time = None 
+        # ****************************
         # 【新增】蜂鳴器全域啟用狀態 (預設開啟)
         self.buzzer_enabled = True 
 
@@ -445,8 +447,20 @@ class StandaloneWindow(QWidget):
             
             # 若目前正在警報中，恢復發聲
             if self.ui_alert_active:
-                duration = self.backend.config.get('alert', {}).get('buzzer_duration_sec', 180)
-                self.backend.buzzer.start_alarm(duration_sec=duration)
+                totoal_duration = self.backend.config.get('alert', {}).get('buzzer_duration_sec', 180)
+                
+                if self.alert_start_time:
+                    elapsed_time = time.time() - self.alert_start_time
+                    remaining_time = totoal_duration - elapsed_time
+
+                    if remaining_time > 0:
+                        self.backend.buzzer.start_alarm(duration_sec=remaining_time)
+                        sys_logger.log(f'恢復發聲，預計剩餘響鈴{int(remaining_time)}秒')
+                    else:
+                        sys_logger.log('警報總時間已過，不再恢復響鈴')  
+                else:
+                    # 防呆: 若無紀錄時間，則直接啟動總時間
+                    self.backend.buzzer.start_alarm(duration_sec=totoal_duration)
         else:
             # 狀態：靜音
             self.btn_buzzer_toggle.setText("🔇 蜂鳴器：已靜音\n(點擊開啟)")
@@ -459,6 +473,9 @@ class StandaloneWindow(QWidget):
     # 觸發警報時的動作
     def trigger_alert_ui(self, alert_type=''):
         self.ui_alert_active = True
+        # 【新增】記錄事件發生的系統時間
+        self.alert_start_time = time.time()
+        # ********************************
         self.btn_alert.setText("⚠️ 異常發生 ⚠️\n點擊重置")
         self.btn_alert.setStyleSheet(self.style_alert)
         self.btn_alert.setEnabled(True)
@@ -483,7 +500,9 @@ class StandaloneWindow(QWidget):
     # 解除警報時的動作
     def reset_alert_state(self):
         sys_logger.log("使用者手動重置警報")
-
+        # 【新增】清除起始時間紀錄
+        self.alert_start_time = None
+        # ****************************
         # 1. 呼叫後端重置推論狀態
         self.backend.reset_alert()
         # 2. 強制停止硬體蜂鳴器 (綁定消音邏輯)
