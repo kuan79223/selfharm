@@ -275,6 +275,20 @@ class DetectThread(threading.Thread):
 
         self.frame_buffer = deque(maxlen=int(self.sys_fps * self.pre_event_seconds))
 
+
+        # ==================== [新增] 初始化 24 小時錄影執行緒 ====================
+        self.continuous_thread = ContinuousRecordThread(
+            base_dir=self.base_dir,
+            cam_id=self.cam_id,
+            fps=self.sys_fps,
+            size=self.standard_size
+        )
+        self.continuous_thread.start()
+        # =========================================================================
+
+
+
+
     def run(self):
         # 加入全域 Try-Catch，防止執行緒無聲無息死亡
         try:
@@ -500,17 +514,21 @@ class DetectThread(threading.Thread):
                                 #     if hist_frame is not None:
                                 #         self.eventWriter.write(hist_frame)
 
+                # 有骨幹的影像
+                # self.frame_buffer.append(im0.copy())
+                # 無骨幹的影像
+                self.frame_buffer.append(img0.copy())
+                
+                
+                # 寫入 24 小時連續錄影 (若佇列未滿)
+                if not self.continuous_thread.record_queue.full():
+                    self.continuous_thread.record_queue.put(img0.copy())
 
-                self.frame_buffer.append(im0.copy())
-                # if self.b_recording and self.eventWriter is not None:
-                #     self.eventWriter.write(im0)
                 if self.b_recording and self.record_thread is not None:
-                    # 必須使用 copy() 防止被下一迴圈覆寫
-                    self.record_queue.put(im0.copy())
-                    # *******************************
+                    #     self.record_queue.put(im0.copy())
+                    self.record_queue.put(img0.copy())
                     if (time.time() - self.event_start_time) > self.post_event_seconds: 
-                        # print(f"[Cam{self.cam_id}] 事件結束，停止錄影。")
-                        self.stop_recording_and_save() # 呼叫存檔函式
+                        self.stop_recording_and_save()
 
                 # 推送影像
                 if self.shared_frame_queue.full():
@@ -529,7 +547,13 @@ class DetectThread(threading.Thread):
             # 確保執行緒結束時（無論是正常停止還是崩潰），影片都能被儲存
             # print(f"Cam{self.cam_id} 影片儲存執行緒結束，執行清理...")
             self.stop_recording_and_save()
+            # ==================== [新增] 安全停止 24H 錄影 ====================
+            if hasattr(self, 'continuous_thread') and self.continuous_thread is not None:
+                self.continuous_thread.stop()
+                self.continuous_thread.join(timeout=2.0)
+            # ==================================================================
 
+            
     # ==========================================
     # 獨立出來的存檔函式
     # ==========================================
@@ -555,3 +579,64 @@ class DetectThread(threading.Thread):
         self.current_alert_state = False
     
     
+
+    class ContinuousRecordThread(threading.Thread):
+        '''
+        負責在背景獨立進行 24 小時全天候錄影，
+        自動依據「小時」切割影片檔案，避免單一檔案過大導致毀損。
+        '''
+        def __init__(self, base_dir, cam_id, fps, size):
+            super().__init__(daemon=True)
+            self.base_dir = Path(base_dir)
+            self.cam_id = cam_id
+            # 若系統初始 FPS 為 0 或異常，給予預設值 15 (來源：detect_thread.py 邏輯推論)
+            self.fps = fps if fps > 0 else 15 
+            self.size = size
+            self.record_queue = queue.Queue(maxsize=300) # 緩衝區避免 I/O 阻塞
+            self.running = True
+            self.writer = None
+            self.current_hour = None
+
+        def _get_writer(self):
+            now = datetime.now()
+            # 以小時為單位命名，例如：20251226_11
+            hour_str = now.strftime("%Y%m%d_%H")
+            
+            if self.current_hour != hour_str:
+                if self.writer is not None:
+                    self.writer.release()
+                
+                self.current_hour = hour_str
+                # 建立獨立的 Continuous 資料夾區分事件錄影
+                save_dir = self.base_dir / "Continuous" / now.strftime("%Y/%m/%d")
+                save_dir.mkdir(parents=True, exist_ok=True)
+                
+                filepath = save_dir / f"Cam{self.cam_id}_Continuous_{hour_str}.mp4"
+                self.writer = cv2.VideoWriter(str(filepath), cv2.VideoWriter_fourcc(*'mp4v'), self.fps, self.size)
+                print(f'[Cam{self.cam_id}] 建立連續錄影新檔案: {filepath}')
+                
+            return self.writer
+
+        def run(self):
+            try:
+                while self.running:
+                    try:
+                        # 使用 timeout 確保能響應 running 狀態改變
+                        frame = self.record_queue.get(timeout=1)
+                        if frame is None: # 收到終止信號
+                            break
+                        
+                        writer = self._get_writer()
+                        writer.write(frame)
+                    except queue.Empty:
+                        continue
+            except Exception as e:
+                print(f'!!! [Cam{self.cam_id}] 24小時錄影發生錯誤: {e} !!!')
+                traceback.print_exc()
+            finally:
+                if self.writer is not None:
+                    self.writer.release()
+
+        def stop(self):
+            self.running = False
+            self.record_queue.put(None)
