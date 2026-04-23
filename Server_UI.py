@@ -28,6 +28,8 @@ from models.experimental import attempt_load
 from utils.torch_utils import select_device
 # import globals as gl
 
+from video_thread import VideoFileThread
+
 # 【新增】匯入獨立封裝的蜂鳴器模組
 from buzzer_controller import BuzzerController
 import tensorrt as trt
@@ -234,7 +236,6 @@ class BackendSystem:
             sys_logger.log(f"Thermal Engine 模型載入失敗: {e}", is_error=True)
             raise e
 
-
         # 2. 設定網路相機
         CAM0_PORT = 8000
         CAM1_PORT = 8001
@@ -242,8 +243,19 @@ class BackendSystem:
         sys_logger.log(f"啟動相機接收 Port: {CAM0_PORT}, {CAM1_PORT}")
 
         self.cams = []
-        self.cams.append(CameraThread(port=CAM0_PORT, name='Cam0', rotate=True))
-        self.cams.append(CameraThread(port=CAM1_PORT, name='Cam1', rotate=True))
+        # self.cams.append(CameraThread(port=CAM0_PORT, name='Cam0', rotate=True))
+        # self.cams.append(CameraThread(port=CAM1_PORT, name='Cam1', rotate=True))
+
+        # 取得目前此程式碼檔案所在的資料夾路徑
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = '/mnt/usb_ssd/Project/Continuous/2026/04/23/'
+        video_filename = 'Cam1_Continuous_20260423_19.mp4'
+        full_path = os.path.join(base_dir, video_filename)
+        self.cams.append(VideoFileThread(
+            video_path=full_path, 
+            name=video_filename, 
+            rotate=False
+        ))
 
         # 3. 準備路徑
         base_path = Path(self.BASE_VIDEO_DIR)

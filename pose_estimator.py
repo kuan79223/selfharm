@@ -227,7 +227,7 @@ class PoseEstimator(object):
                     self.leftAnkleToRightWallDist < self.ankle_thre_dist or 
                     self.rightAnkleToRightWallDist < self.ankle_thre_dist):
                     self.near_ankle_state = True
-
+                
                 # 在實驗室環境下測試用
                 # # 左右腳
                 # self.min_leftAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center,

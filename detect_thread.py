@@ -287,7 +287,7 @@ class DetectThread(threading.Thread):
             base_dir=self.base_dir,
             cam_id=self.cam_id,
             fps=self.sys_fps,
-            size=self.standard_size
+            size=(original_width, original_height)
         )
         self.continuous_thread.start()
         # =========================================================================
@@ -307,17 +307,30 @@ class DetectThread(threading.Thread):
                 if frame is None:
                     time.sleep(0.01)
                     continue
+                
+                # ==================== [新增核心] 純淨影像擷取與錄影分發 ====================
+                # 複製一份完全無修改的原始影像
+                raw_frame = frame.copy()
+                raw_h, raw_w = raw_frame.shape[:2]
+
+                # A. 寫入 24 小時連續錄影 (純影像)
+                if not self.continuous_thread.record_queue.full():
+                    self.continuous_thread.record_queue.put(raw_frame.copy())
+
+                # B. 事件錄影：存入預錄緩衝區 (純影像)
+                self.frame_buffer.append(raw_frame.copy())
+
+                if self.b_recording and getattr(self, 'record_thread', None) is not None:
+                    self.record_queue.put(frame)
+                    if (time.time() - self.event_start_time) > self.post_event_seconds: 
+                        self.stop_recording_and_save()
 
                 # ==================== [新增] 校正 -> 裁切 -> 縮放 pipeline ====================
                 if self.enable_calibration:
                     # 1. 校正 (Undistort)
-                    # 使用 remap 比 undistort 快，因為 map 是預先算好的
                     frame_undist = cv2.remap(cv2.resize(frame, self.standard_size), self.mapx, self.mapy, cv2.INTER_LINEAR)
-                    # 2. 裁切 (Crop) - 使用 numpy slicing
-                    # Python Slice 語法是 [y_start : y_end, x_start : x_end]
                     x_s, x_e, y_s, y_e = self.crop_coords
                     frame_cropped = frame_undist[y_s:y_e, x_s:x_e]
-
                     # 3. 縮放 (Resize) - 回復到 640x480
                     frame = cv2.resize(frame_cropped, self.standard_size, interpolation=cv2.INTER_LINEAR)
                 # ============================================================================
@@ -371,7 +384,7 @@ class DetectThread(threading.Thread):
                     # 2. 信心度數值監測 (只在啟動時印出前 10 幀供除錯)
                     if self.frame_count < 10:
                         max_conf = pred[..., 4].max().item()
-                        print(f"DEBUG [Cam{self.cam_id}] - NMS前維度: {pred.shape}, 最高信心度: {max_conf:.4f}")
+                        # print(f"DEBUG [Cam{self.cam_id}] - NMS前維度: {pred.shape}, 最高信心度: {max_conf:.4f}")
 
                     # 進行 NMS (非極大值抑制)
                     pred = non_max_suppression_kpt(pred, conf_thres=self.conf_threshold, iou_thres=self.iou_threshold, classes=0, agnostic=False, kpt_label=True)
@@ -433,14 +446,6 @@ class DetectThread(threading.Thread):
                             
                             print(f"[Cam{self.cam_id}] 系統負載 FPS 校正完成，鎖定為: {self.calibrated_fps} FPS")
                     # # *************************************************************************
-                    # # 【新增核心邏輯】只有偵測到人，才將當下 FPS 加入陣列計算
-                    # self.fps_records.append(self.sys_fps)
-
-                    # # 只要收集到 10 幀「有人的畫面」，就開始動態更新平均 FPS，反應速度會比等 50 幀更快
-                    # if len(self.fps_records) >= 10:
-                    #     self.loaded_fps = sum(self.fps_records) / len(self.fps_records)
-                    #     safe_fps = int(max(5, min(self.loaded_fps, 30)))
-                        
                             # 動態調整錄影前緩衝區 (pre_event_seconds) 大小
                             new_buffer_len = int(self.calibrated_fps * self.pre_event_seconds)
                             if new_buffer_len != self.frame_buffer.maxlen:
@@ -449,7 +454,7 @@ class DetectThread(threading.Thread):
 
                             # 更新給 Pose Estimator 的時序參數
                             self.pose_estimator.update_fps(self.calibrated_fps)
-
+                            self.cam.update_fps(self.calibrated_fps)  # 更新給攝影機物件，讓它知道新的 FPS
                     # *************************************************************************
 
                     det = pred[0]
@@ -502,7 +507,6 @@ class DetectThread(threading.Thread):
                             self.event_start_time = time.time()
 
                             if not self.b_recording:
-                                # print(f'[Cam{self.cam_id}] 觸發事件！開始錄影...')
                                 self.b_recording = True
                                 
                                 # 【修改 2】 動態生成當下的日期資料夾
@@ -534,38 +538,16 @@ class DetectThread(threading.Thread):
                                 self.record_thread = VideoRecordsThread(
                                     filepath=self.final_cam_path, 
                                     fps=record_fps, 
-                                    size=(w, h), 
+                                    size=(raw_w, raw_h), 
                                     pre_frames=history_frames, 
                                     record_queue=self.record_queue, 
                                     cam_id=self.cam_id
                                     )
                                 self.record_thread.start()
                                 print(f'[Cam{self.cam_id}] 背景錄影執行緒啟動 (FPS: {record_fps})')
-                                
-                                # self.eventWriter = cv2.VideoWriter(self.final_cam_path, cv2.VideoWriter_fourcc(*'mp4v'), record_fps, (w, h))
-                                # print(f'儲存成影片的FPS為: {record_fps}')
-                                # 寫入緩衝區影像
-                                # history_frames = list(self.frame_buffer)
-                                # for hist_frame in history_frames:
-                                #     if hist_frame is not None:
-                                #         self.eventWriter.write(hist_frame)
-
-                # 有骨幹的影像
-                # self.frame_buffer.append(im0.copy())
-                # 無骨幹的影像
+                    
                 self.frame_buffer.append(img0.copy())
                 
-                
-                # 寫入 24 小時連續錄影 (若佇列未滿)
-                if not self.continuous_thread.record_queue.full():
-                    self.continuous_thread.record_queue.put(img0.copy())
-
-                if self.b_recording and self.record_thread is not None:
-                    #     self.record_queue.put(im0.copy())
-                    self.record_queue.put(img0.copy())
-                    if (time.time() - self.event_start_time) > self.post_event_seconds: 
-                        self.stop_recording_and_save()
-
                 # 推送影像
                 if self.shared_frame_queue.full():
                     try: 
@@ -662,7 +644,41 @@ class ContinuousRecordThread(threading.Thread):
                         break
                     
                     writer = self._get_writer()
-                    writer.write(frame)
+                    # writer.write(frame)
+
+                    # 替換原有的 writer.write(frame)
+                    # ---------------------------------------------------------
+                    if frame is None or frame.size == 0:
+                        print(f"[Cam{self.cam_id}] 警告：嘗試寫入空影格，已跳過。")
+                        continue
+
+                    # [除錯用] 檢查傳入影格的實際維度與型別
+                    actual_h, actual_w = frame.shape[:2]
+                    actual_channels = frame.shape[2] if len(frame.shape) == 3 else 1
+
+                    # 確保傳入的影格尺寸與 VideoWriter 初始化的大小完全一致
+                    expected_w, expected_h = self.size 
+
+                    if actual_w != expected_w or actual_h != expected_h:
+                        print(f"!!! [Cam{self.cam_id}] 致命錯誤：解析度不符 !!!")
+                        print(f"VideoWriter 預期: {expected_w}x{expected_h}, 實際傳入: {actual_w}x{actual_h}")
+                        # 強制重置大小以防止 FFmpeg 崩潰
+                        frame = cv2.resize(frame, (expected_w, expected_h))
+
+                    # 熱像儀灰階防呆：如果影像只有單通道，強制轉為 3 通道 BGR 供 MP4 寫入
+                    if actual_channels == 1:
+                        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+
+                    # 確保資料型別正確
+                    if frame.dtype != np.uint8:
+                        frame = frame.astype(np.uint8)
+
+                    # 安全寫入
+                    try:
+                        writer.write(frame)
+                    except Exception as e:
+                        print(f"!!! [Cam{self.cam_id}] OpenCV 底層寫入例外: {e} !!!")
+                    # ---------------------------------------------------------
                 except queue.Empty:
                     continue
         except Exception as e:

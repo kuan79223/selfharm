@@ -71,6 +71,10 @@ class CameraThread:
                 print(f"[{self.name}] ZMQ 接收錯誤: {e}")
                 time.sleep(1)
 
+    def update_fps(self, new_fps):
+        pass
+        
+
     def read(self):
         """提供給 DetectThread 呼叫的介面"""
         with self.lock:
