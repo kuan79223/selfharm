@@ -20,6 +20,13 @@ def getAngle(kpts):
         B = 0
     return B
 
+# 獲得身體骨幹
+def get_body_center(kpt_list):
+    x = sum(pt[0] for pt in kpt_list)
+    y = sum(pt[1] for pt in kpt_list)
+    return (x // len(kpt_list), y // len(kpt_list))
+
+
 # 改寫判斷連續事件的方式
 def check_consecutive_trigger_with_one_break(queue, required_consecutive=3):
     count = 0
@@ -31,6 +38,9 @@ def check_consecutive_trigger_with_one_break(queue, required_consecutive=3):
         else:
             break  # 一遇到0就中斷
     return False
+
+
+
 
 # # 設定幾秒當作是觀察區間
 # INTERVAL = 10
@@ -116,6 +126,10 @@ class PoseEstimator(object):
         self.head_angle_change = 0.0
         self.head_avg_angle = 0
         
+        self.curr_body_center = None
+        self.prev_body_center = None
+
+
         if record_diagram_to_csv:
             # 初始化 CSV，寫入標頭
             with open(self.csv_hand, mode='w', newline='') as file:
@@ -143,6 +157,25 @@ class PoseEstimator(object):
             print(f'位移速度比例換算: {self.thre_velocity}')
 
     def update_hand_info(self, kpts_list, frame_count):
+        
+        # 每一幀的骨幹與狀態資料預設值
+        frame_data_default = {
+            "frame_count": frame_count,
+            'timestamp': time.time(),
+            "right_wrist": [0, 0], 
+            "left_wrist": [0, 0],
+            "right_elbow_angle": 0,
+            "left_elbow_angle": 0,
+            "nose": [0, 0],
+            "hand_shift_flag": 0,
+            "head_shift_flag": 0,
+            "right_ankle": [0, 0],
+            "left_ankle": [0, 0],
+            "right_velocity": 0,
+            "left_velocity": 0
+            
+        }
+
 
         valid_kpts = [kpt for kpt in kpts_list if kpt[2] > 0.5]
         # print(f'骨幹列表{kpts_list}, 長度{len(kpts_list)}')
@@ -150,9 +183,32 @@ class PoseEstimator(object):
         #########################################
         # 可以 Loss 掉兩個低於門檻值的關節點
         if len(valid_kpts) >= 15:
-            self.near_ankle_state = False
-            ######### 計算腳踝 ##################################################################################################################
+            
+            left_hip, right_hip = kpts_list[11][:2], kpts_list[12][:2]
+            self.nose = kpts_list[0][:2]
+            
+            left_shoulder, left_elbow, self.left_wrist = kpts_list[5][:2], kpts_list[7][:2], kpts_list[9][:2]
+            right_shoulder, right_elbow, self.right_wrist = kpts_list[6][:2], kpts_list[8][:2], kpts_list[10][:2]
             left_ankle, right_ankle = kpts_list[15][:2], kpts_list[16][:2]
+            self.near_ankle_state = False
+
+            # 計算手肘角度
+            self.right_elbow_angle = getAngle([right_shoulder, right_elbow, self.right_wrist])
+            self.left_elbow_angle = getAngle([left_shoulder, left_elbow, self.left_wrist])
+            # print(f'右手肘角度{self.right_elbow_angle}; 左手肘角度{self.left_elbow_angle}')
+            self.curr_body_center = get_body_center([left_shoulder, right_shoulder, left_hip, right_hip])
+            # print([left_shoulder, right_shoulder, left_hip, right_hip])
+            # print(self.curr_body_center)
+            calculate_distance = self.calculate_distance(self.prev_body_center, self.curr_body_center) 
+
+            # print('座標', self.prev_body_center, self.curr_body_center)
+
+            self.prev_body_center = self.curr_body_center # 保持前一幀的身體中心不變
+
+            if calculate_distance >= 100:  # 如果身體中心移動距離過大，可能是偵測錯誤，跳過這幀的計算
+                print(f'身體中心移動距離過大 ({calculate_distance:.2f})，可能是偵測錯誤，跳過計算')
+                return 
+            
             # 左牆壁線
             if self.wall_config:
                 wall_center = self.wall_config['center']
@@ -192,20 +248,7 @@ class PoseEstimator(object):
             else:
                 # Fallback if no config provided (optional, or keep 0)
                 self.near_ankle_state = False
-
-            #   ********************** 正式 ***********************
-            # -----------------------
-            self.nose = kpts_list[0][:2]
-            # -----------------------
-            #####################################################################################################################################
-            left_shoulder, left_elbow, self.left_wrist = kpts_list[5][:2], kpts_list[7][:2], kpts_list[9][:2]
-            right_shoulder, right_elbow, self.right_wrist = kpts_list[6][:2], kpts_list[8][:2], kpts_list[10][:2]
-
-            # 計算手肘角度
-            self.right_elbow_angle = getAngle([right_shoulder, right_elbow, self.right_wrist])
-            self.left_elbow_angle = getAngle([left_shoulder, left_elbow, self.left_wrist])
-            # print(f'右手肘角度{self.right_elbow_angle}; 左手肘角度{self.left_elbow_angle}')
-
+                
             # 若隊列非空，計算當前幀與上一幀的位移速度
             if self.frame_queue:
                 if not self.frame_queue.empty():
@@ -216,6 +259,11 @@ class PoseEstimator(object):
                     prev_nose = np.array(prev_frame.get('nose', [0, 0]))
                     prev_right_ankle = np.array(prev_frame.get("right_ankle", [0, 0]))
                     prev_left_ankle = np.array(prev_frame.get("left_ankle", [0, 0]))
+
+                    prev_left_shoulder = np.array(prev_frame.get("left_shoulder", [0, 0]))
+                    prev_right_shoulder = np.array(prev_frame.get("right_shoulder", [0, 0]))
+                    prev_left_hip = np.array(prev_frame.get("left_hip", [0, 0]))
+                    prev_right_hip = np.array(prev_frame.get("right_hip", [0, 0]))
 
                     prev_timestamp = prev_frame.get("timestamp", self.current_timestamp)
                     # prev_timestamp = self.frame_data["timestamp"]
@@ -261,21 +309,17 @@ class PoseEstimator(object):
                         self.head_shift_flag = 0
 
                 # 正常處理當前幀資料
-                self.frame_data = {
-                    "frame_count": frame_count,
-                    'timestamp': self.current_timestamp,
-                    "right_wrist": self.right_wrist,
-                    "left_wrist": self.left_wrist,
-                    "right_elbow_angle": self.right_elbow_angle,
-                    "left_elbow_angle": self.left_elbow_angle,
-                    "nose": self.nose,
-                    "hand_shift_flag": self.hand_shift_flag,
-                    "head_shift_flag": self.head_shift_flag,
-                    "right_ankle": right_ankle,
-                    "left_ankle": left_ankle,
-                    'right_velocity': self.right_velocity,
-                    'left_velocity': self.left_velocity,
-                }
+                frame_data_default["right_wrist"] = self.right_wrist
+                frame_data_default["left_wrist"] = self.left_wrist
+                frame_data_default["right_elbow_angle"] = self.right_elbow_angle
+                frame_data_default["left_elbow_angle"] = self.left_elbow_angle
+                frame_data_default["nose"] = self.nose
+                frame_data_default["hand_shift_flag"] = self.hand_shift_flag
+                frame_data_default["head_shift_flag"] = self.head_shift_flag
+                frame_data_default["right_ankle"] = right_ankle
+                frame_data_default["left_ankle"] = left_ankle
+                frame_data_default['right_velocity'] = self.right_velocity
+                frame_data_default['left_velocity'] = self.left_velocity
 
         else:
             # print(f'Frame {frame_count} 無骨幹，使用前一幀數據進行補值')
@@ -289,37 +333,9 @@ class PoseEstimator(object):
             self.near_ankle_state = False  # <--- 接近牆壁線狀態
             self.hand_harm_alert_sent = False
             self.head_harm_alert_sent = False
-            # 補充可能缺失的字段 =================================================================
-            if self.frame_data_copy:
-                self.frame_data = self.frame_data_copy.copy()
-                # 確保補值時將所有欄位補充完整，並防止影響位移計算
-                self.frame_data["right_velocity"] = 0
-                self.frame_data["left_velocity"] = 0
-                self.frame_data["right_elbow_angle"] = self.frame_data.get("right_elbow_angle", 0)
-                self.frame_data["left_elbow_angle"] = self.frame_data.get("left_elbow_angle", 0)
-                self.frame_data["hand_shift_flag"] = 0
-                self.frame_data["head_shift_flag"] = 0
                 
-            else:
-                # 若沒有上一幀資料，給與預設值
-                self.frame_data = {
-                    "frame_count": frame_count,
-                    "right_velocity": 0,
-                    "left_velocity": 0,
-                    "right_elbow_angle": 0,
-                    "left_elbow_angle": 0,
-                    "hand_shift_flag": 0,
-                    "head_shift_flag": 0,
-                    # --- 新增以下補值以避免 KeyError ---
-                    "right_wrist": [0, 0], 
-                    "left_wrist": [0, 0],
-                    "nose": [0, 0],
-                    "right_ankle": [0, 0],
-                    "left_ankle": [0, 0]
-                }
-
         # 將每一幀的數據備分 ##############################################################
-        self.frame_data_copy = self.frame_data.copy()
+        # self.frame_data_copy = self.frame_data.copy()
 
         # ======== 用字典存放序列 ========
         # 若隊列已滿，移除最舊的幀
@@ -327,7 +343,7 @@ class PoseEstimator(object):
             if self.frame_queue.full():
                 self.frame_queue.get()
             ##############################################################
-            self.frame_queue.put(self.frame_data)
+            self.frame_queue.put(frame_data_default)
 
         ##############################################################
         if self.frame_queue:
@@ -429,19 +445,8 @@ class PoseEstimator(object):
                         self.near_ankle_state, 
                         self.nose_velocity, 
                         self.head_shift_count, 
-                        self.head_trigger_event, 
                         self.head_harm_alert_sent])
-        # 返回 18
-        return (frame_count, round(self.right_velocity), self.right_elbow_angle, self.right_avg_angle,
-                round(self.left_velocity), self.left_elbow_angle, self.left_avg_angle,
-                self.hand_shift_count, self.hand_harm_alert_sent,
-                self.near_ankle_state,
-                round(self.leftAnkleToLeftWallDist, 2),
-                round(self.rightAnkleToLeftWallDist, 2),
-                round(self.leftAnkleToRightWallDist, 2),
-                round(self.rightAnkleToRightWallDist, 2),
-                round(self.nose_velocity), self.head_shift_count, self.head_harm_alert_sent, self.head_angle_change)
-    
+
 
     # 計算向量長度
     def calculate_distance(self, prev_point, curr_point):
@@ -532,8 +537,8 @@ class PoseEstimator(object):
         self.head_shift_flag = 0
         
         # 清空複製的幀數據
-        self.frame_data = dict()
-        self.frame_data_copy = dict()
+        # self.frame_data = dict()
+        # self.frame_data_copy = dict()
     
 
 

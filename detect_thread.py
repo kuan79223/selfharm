@@ -129,8 +129,14 @@ class DetectThread(threading.Thread):
         self.names = names
         self.half = half
         self.imgsz = imgsz
-        self.stride = int(model.stride.max())
-        
+        # self.stride = int(model.stride.max())
+
+        # 【修改】增加型別防呆：判斷 stride 是否帶有 max 屬性 (Tensor)，若無則視為純數值 (Int)
+        if hasattr(model.stride, 'max'):
+            self.stride = int(model.stride.max())
+        else:
+            self.stride = int(model.stride)
+
         # ***** 從設定檔載入參數 ******
         # 預測的門檻
         det_cfg = self.cfg.get('detection_params', {})
@@ -296,12 +302,12 @@ class DetectThread(threading.Thread):
             while self.running:
                 if self.stop_event.is_set():
                     break
-
+                
                 frame = self.cam.read()
                 if frame is None:
                     time.sleep(0.01)
                     continue
-                
+
                 # ==================== [新增] 校正 -> 裁切 -> 縮放 pipeline ====================
                 if self.enable_calibration:
                     # 1. 校正 (Undistort)
@@ -318,17 +324,58 @@ class DetectThread(threading.Thread):
 
                 # self.prev_time = time.time()
                 img0 = frame.copy()
-                img = letterbox(img0, self.imgsz, stride=self.stride, auto=True)[0]
+                # img = letterbox(img0, self.imgsz, stride=self.stride, auto=True)[0]
+                # 【修復重點】TensorRT 是靜態維度，必須關閉 auto，強制 Padding 填滿至 640x640
+                img = letterbox(img0, self.imgsz, stride=self.stride, auto=False)[0]
                 img = img[:, :, ::-1].transpose(2, 0, 1)
                 img = np.ascontiguousarray(img)
                 img = torch.from_numpy(img).to(self.device)
+
                 img = img.half() if self.half else img.float()
                 img /= 255.0
                 img = img.unsqueeze(0)
-
+                
+                # # .pt版本
+                # with self.model_lock:
+                #     pred = self.model(img, augment=False)[0]
+                #     pred = non_max_suppression_kpt(pred, conf_thres=self.conf_threshold, iou_thres=self.iou_threshold, classes=0, agnostic=False, kpt_label=True)
+                
                 with self.model_lock:
-                    pred = self.model(img, augment=False)[0]
+                    pred = self.model(img, augment=False)
+
+                    # 1. 增強型防呆解析：動態尋找正確的 3D 推論輸出特徵圖
+                    if isinstance(pred, tuple) or isinstance(pred, list):
+                        # 找出維度為 3 且符合 YOLO 輸出特徵的 Tensor (例如形狀 [1, 25200, 57])
+                        valid_preds = [p for p in pred if p.dim() == 3]
+                        if valid_preds:
+                            pred = valid_preds[0]
+                            
+                        else:
+                            pred = pred[0]
+                    elif type(pred).__name__ == 'Tensor':
+                        pass # 若直接是 Tensor 則保持原樣
+
+                    # 2. 強制轉回 FP32，避免 NMS 或座標縮放時發生數值溢位導致骨幹消失
+                    pred = pred.float()
+
+                    # ==========================================
+                    # 【新增核心區塊】維度校正與數值診斷
+                    # ==========================================
+                    # 1. 自動維度翻轉 (防呆)：若特徵維度 (57) 跑到了前面，將其轉置回來
+                    if pred.shape[1] == 57:
+                        pred = pred.transpose(1, 2)
+                        if not hasattr(self, '_dim_fixed'):
+                            print(f"[Cam{self.cam_id}] ⚠️ 觸發維度自動校正: 轉換為 {pred.shape}")
+                            self._dim_fixed = True
+                    
+                    # 2. 信心度數值監測 (只在啟動時印出前 10 幀供除錯)
+                    if self.frame_count < 10:
+                        max_conf = pred[..., 4].max().item()
+                        print(f"DEBUG [Cam{self.cam_id}] - NMS前維度: {pred.shape}, 最高信心度: {max_conf:.4f}")
+
+                    # 進行 NMS (非極大值抑制)
                     pred = non_max_suppression_kpt(pred, conf_thres=self.conf_threshold, iou_thres=self.iou_threshold, classes=0, agnostic=False, kpt_label=True)
+
 
                 im0 = img0.copy()
 
@@ -362,21 +409,6 @@ class DetectThread(threading.Thread):
                 # self.sys_fps = 1 / elapsed_time if elapsed_time > 0 else 0
                 self.sys_fps = current_frame_fps
 
-                # self.fps_records.append(self.sys_fps)
-
-                # # 只保留最近 50 筆 計算平均FPS，當作序列長度
-                # if len(self.fps_records) == 50:
-                #     self.sys_fps = round(sum(self.fps_records) / len(self.fps_records))
-                #     # 加入合理範圍限制 (例如限制在 5 ~ 30 之間)
-                #     safe_fps = int(max(5, min(self.sys_fps, 30)))
-                #     # ******************************************
-                #     new_buffer_len = int(safe_fps * self.pre_event_seconds)
-                #     if new_buffer_len != self.frame_buffer.maxlen:
-                #         self.frame_buffer = deque(self.frame_buffer, maxlen=new_buffer_len)
-
-                #     self.pose_estimator.update_fps(self.sys_fps)
-                    
-                # cv2.putText(im0, f'FPS: {round(self.sys_fps, 1)}', (int(10 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, WHITE, self.scaled_thickness, cv2.LINE_AA)
                 # 在影像上顯示 FPS，這部分也應該根據縮放比例來調整
                 cv2.putText(im0, f'FPS: {round(current_frame_fps, 1)}', 
                             (int(10 * self.scale_x), int(100 * self.scale_y)),  # 調整位置
@@ -386,6 +418,7 @@ class DetectThread(threading.Thread):
                             self.scaled_thickness,  # 根據縮放比例調整粗細
                             cv2.LINE_AA)
                 
+
                 if len(pred[0]):
                     # 【核心修改】偵測到人時的延遲校正機制
                     if not self.is_fps_calibrated:
@@ -424,35 +457,38 @@ class DetectThread(threading.Thread):
                     scale_coords(img.shape[2:], det[:, 6:], im0.shape, kpt_label=True, step=3)
                     
                     det = det[:1]  # 只處理最高信心度的偵測結果
+
                     for det_index, (*xyxy, conf, cls) in enumerate(reversed(det[:, :6])):
                         c = int(cls)
                         label = f'{self.names[c]} {conf:.2f}'
                         kpts = det[det_index, 6:]
                         kpts_list = [[round(kpts[j].item(), 2), round(kpts[j + 1].item(), 2), round(kpts[j + 2].item() * 2)] for j in range(0, len(kpts), 3)]
-
+                        if not kpts_list:
+                            continue
                         # 呼叫 Pose Estimator
-                        _, R_vel, R_agl, avg_Ragl, L_vel, L_agl, avg_Lagl, hand_count, hand_alert_signal, near_ankle_state, leftAnkle_near_disL, rightAnkle_near_disL, leftAnkle_near_disR, rightAnkle_near_disR, nose_velocity, head_count, head_alert_signal, head_angle_change = self.pose_estimator.update_hand_info(kpts_list, self.frame_count)
+                        # _, R_vel, R_agl, avg_Ragl, L_vel, L_agl, avg_Lagl, hand_count, hand_alert_signal, near_ankle_state, leftAnkle_near_disL, rightAnkle_near_disL, leftAnkle_near_disR, rightAnkle_near_disR, nose_velocity, head_count, head_alert_signal, head_angle_change = self.pose_estimator.update_hand_info(kpts_list, self.frame_count)
+                        
+                        self.pose_estimator.update_hand_info(kpts_list, self.frame_count)
                         # 調整文字顯示的位置，因為影像被裁切放大，需要調整
-                        cv2.putText(im0, f"R Vel: {R_vel}", (int(10 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, f"L Vel: {L_vel}", (int(10 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
                         cv2.putText(im0, f'Cam: {self.cam_id}', (int(80 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, f"Hand Count: {hand_count}", (int(10 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, "Hand Self Harm" if hand_alert_signal else " ", (int(80 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness* 2, cv2.LINE_AA)
-                        cv2.putText(im0, "near wall" if near_ankle_state else " ", (int(80 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness * 2, cv2.LINE_AA)
-                        cv2.putText(im0, f"Head Vel: {nose_velocity}", (int(10 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, f"Head Count: {head_count}", (int(10 * self.scale_x), int(50 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
-                        cv2.putText(im0, "Head Self Harm" if head_alert_signal else " ", (int(80 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness* 2, cv2.LINE_AA)
+
+                        cv2.putText(im0, f"R Vel: {round(self.pose_estimator.right_velocity)}", (int(10 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, f"L Vel: {round(self.pose_estimator.left_velocity)}", (int(10 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, f"Hand Count: {self.pose_estimator.hand_shift_count}", (int(10 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, "Hand Self Harm" if self.pose_estimator.hand_harm_alert_sent else " ", (int(80 * self.scale_x), int(20 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness* 2, cv2.LINE_AA)
+                        cv2.putText(im0, "near wall" if self.pose_estimator.near_ankle_state else " ", (int(80 * self.scale_x), int(30 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness * 2, cv2.LINE_AA)
+                        cv2.putText(im0, f"Head Vel: {round(self.pose_estimator.nose_velocity)}", (int(10 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, f"Head Count: {self.pose_estimator.head_shift_count}", (int(10 * self.scale_x), int(50 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
+                        cv2.putText(im0, "Head Self Harm" if self.pose_estimator.head_harm_alert_sent else " ", (int(80 * self.scale_x), int(40 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.green, self.scaled_thickness* 2, cv2.LINE_AA)
         
                         plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=2, kpt_label=True, kpts=kpts, steps=3, orig_shape=im0.shape[:2])
 
-                        # self.frame_buffer.append(im0.copy())
-                        # self.current_alert_state = hand_alert_signal or head_alert_signal
                         # 在UI上細分自傷狀態
                         alert_types = []
-                        if hand_alert_signal:
+                        if self.pose_estimator.hand_harm_alert_sent:
                             alert_types.append("發生手部自傷行為")
                             # print("DEBUG: 偵測到手部異常！")  # <--- 建議打開註解測試
-                        elif head_alert_signal:
+                        elif self.pose_estimator.head_harm_alert_sent:
                             alert_types.append("發生頭部自傷行為")
                             # print("DEBUG: 偵測到頭部異常！")  # <--- 建議打開註解測試
                         
@@ -462,7 +498,7 @@ class DetectThread(threading.Thread):
                         else:
                             self.current_alert_state = None
                         # ==================== 錄影邏輯 ====================
-                        if hand_alert_signal or head_alert_signal:
+                        if self.pose_estimator.hand_harm_alert_sent or self.pose_estimator.head_harm_alert_sent:
                             self.event_start_time = time.time()
 
                             if not self.b_recording:

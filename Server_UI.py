@@ -30,7 +30,55 @@ from utils.torch_utils import select_device
 
 # 【新增】匯入獨立封裝的蜂鳴器模組
 from buzzer_controller import BuzzerController
+import tensorrt as trt
 
+# ==========================================
+# TensorRT 原生推論封裝模組 (自適應 Input Type 版本)
+# ==========================================
+class TRTWrapper:
+    def __init__(self, engine_path, device):
+        self.device = device
+        self.logger = trt.Logger(trt.Logger.WARNING)
+        trt.init_libnvinfer_plugins(self.logger, namespace="")
+        
+        with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
+            self.engine = runtime.deserialize_cuda_engine(f.read())
+        self.context = self.engine.create_execution_context()
+
+        self.bindings = [int(0)] * self.engine.num_bindings
+        self.outputs = []
+        self.input_idx = -1
+        self.input_dtype = None # 【新增】用來記錄 Engine 真正需要的型態
+        self.input_shape = None # 【新增】用來記錄 Engine 真正需要的維度
+        
+        for i in range(self.engine.num_bindings):
+            shape = tuple(self.context.get_binding_shape(i))
+            dtype = trt.nptype(self.engine.get_binding_dtype(i))
+            torch_dtype = torch.from_numpy(np.empty(0, dtype=dtype)).dtype
+            
+            if self.engine.binding_is_input(i):
+                self.input_idx = i
+                self.input_dtype = torch_dtype
+                self.input_shape = shape
+            else:
+                tensor = torch.empty(shape, dtype=torch_dtype, device=self.device)
+                self.bindings[i] = tensor.data_ptr()
+                self.outputs.append(tensor)
+
+        self.names = {0: 'person'} 
+        self.stride = 32
+
+    def __call__(self, img, augment=False):
+        # 【核心防呆 1】強制資料型態對齊：確保餵給 TRT 的一定符合它的預期 (FP16 或 FP32)
+        if img.dtype != self.input_dtype:
+            img = img.to(self.input_dtype)
+            
+        # 【核心防呆 2】確保記憶體連續
+        img = img.contiguous()
+        self.bindings[self.input_idx] = img.data_ptr()
+        
+        self.context.execute_v2(bindings=self.bindings)
+        return self.outputs
 
 def get_executable_dir():
     """
@@ -156,21 +204,37 @@ class BackendSystem:
         # 【修改】初始化外部蜂鳴器類別，並將主程式的 Log 系統對接進去
         self.buzzer = BuzzerController(pin=32, logger_callback=sys_logger.log)
         sys_logger.log("獨立蜂鳴器模組已掛載")
-
-        # 1. 初始化 YOLO
-        print("正在載入 Thermal 模型...")
+        
+        # # 1. 初始化 YOLO 
+        # print("正在載入 T0hermal 模型...")
+        # try:
+        #     self.device = select_device('0')
+        #     self.model = attempt_load('thermalModel_v4_100epoch.pt', map_location=self.device)
+        #     if self.device.type != 'cpu':
+        #         self.model.half()
+        #     self.model(torch.zeros(1, 3, 640, 640).to(self.device).type_as(next(self.model.parameters())))
+        #     self.model_lock = threading.Lock()
+        #     sys_logger.log("Thermal 模型載入成功")
+        # except Exception as e:
+        #     sys_logger.log(f"Thermal 模型載入失敗: {e}", is_error=True)
+        #     raise e
+        
+        # 1. 初始化 YOLO (使用原生 TRTWrapper)
+        print("正在載入 Thermal Engine 模型...")
         try:
             self.device = select_device('0')
-            self.model = attempt_load('thermalModel_v4_100epoch.pt', map_location=self.device)
-            if self.device.type != 'cpu':
-                self.model.half()
-            self.model(torch.zeros(1, 3, 640, 640).to(self.device).type_as(next(self.model.parameters())))
+            engine_path = 'thermalModel_v5b_100epoch.engine'
+            
+            # 【修改】使用我們自建的 TRTWrapper 載入模型
+            self.model = TRTWrapper(engine_path, device=self.device)
+            
             self.model_lock = threading.Lock()
-            sys_logger.log("Thermal 模型載入成功")
+            sys_logger.log("Thermal Engine 模型載入成功 (原生 TensorRT 加速)")
         except Exception as e:
-            sys_logger.log(f"Thermal 模型載入失敗: {e}", is_error=True)
+            sys_logger.log(f"Thermal Engine 模型載入失敗: {e}", is_error=True)
             raise e
-        
+
+
         # 2. 設定網路相機
         CAM0_PORT = 8000
         CAM1_PORT = 8001
