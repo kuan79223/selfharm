@@ -78,8 +78,14 @@ class PoseEstimator(object):
         self.hand_trigger_event = 0
         self.current_timestamp = None
         self.csv_hand = f'hand_log{cam_id}.csv'  # 記錄右手數據的 CSV 檔案
+        # 
         self.right_wrist = None
         self.left_wrist = None
+
+        # --- [新增] 手肘變數 ---
+        self.right_elbow = None
+        self.left_elbow = None
+
         # **************************************
         self.right_distance = 0  # 右手腕移動距離
         self.right_velocity = 0.0  # 右手腕位移速度
@@ -131,10 +137,11 @@ class PoseEstimator(object):
 
 
         if record_diagram_to_csv:
+                
             # 初始化 CSV，寫入標頭
             with open(self.csv_hand, mode='w', newline='') as file:
                 writer = csv.writer(file)
-                writer.writerow(['Frame', 'R_Velocity', 'R_Angel', 'R_AvgAgl', 'L_Velocity', 'L_Angel', 'L_AvgAgl', 'Count', 'Self Harm']) # 手肘角度
+                writer.writerow(['Frame', 'R_Wrist_Y', 'R_Elbow_Y', 'R_Velocity', 'R_Angel', 'R_AvgAgl', 'L_Wrist_Y', 'L_Elbow_Y', 'L_Velocity', 'L_Angel', 'L_AvgAgl', 'Count', 'Self Harm']) # 手肘角度
 
             # 觀察鼻子與牆壁距離 / 頭部的位移速度
             with open(self.csv_head, mode='w', newline='') as file:
@@ -187,14 +194,14 @@ class PoseEstimator(object):
             left_hip, right_hip = kpts_list[11][:2], kpts_list[12][:2]
             self.nose = kpts_list[0][:2]
             
-            left_shoulder, left_elbow, self.left_wrist = kpts_list[5][:2], kpts_list[7][:2], kpts_list[9][:2]
-            right_shoulder, right_elbow, self.right_wrist = kpts_list[6][:2], kpts_list[8][:2], kpts_list[10][:2]
+            left_shoulder, self.left_elbow, self.left_wrist = kpts_list[5][:2], kpts_list[7][:2], kpts_list[9][:2]
+            right_shoulder, self.right_elbow, self.right_wrist = kpts_list[6][:2], kpts_list[8][:2], kpts_list[10][:2]
             left_ankle, right_ankle = kpts_list[15][:2], kpts_list[16][:2]
             self.near_ankle_state = False
 
             # 計算手肘角度
-            self.right_elbow_angle = getAngle([right_shoulder, right_elbow, self.right_wrist])
-            self.left_elbow_angle = getAngle([left_shoulder, left_elbow, self.left_wrist])
+            self.right_elbow_angle = getAngle([right_shoulder, self.right_elbow, self.right_wrist])
+            self.left_elbow_angle = getAngle([left_shoulder, self.left_elbow, self.left_wrist])
             # print(f'右手肘角度{self.right_elbow_angle}; 左手肘角度{self.left_elbow_angle}')
             self.curr_body_center = get_body_center([left_shoulder, right_shoulder, left_hip, right_hip])
             # print([left_shoulder, right_shoulder, left_hip, right_hip])
@@ -294,7 +301,7 @@ class PoseEstimator(object):
                     is_fast_head = self.nose_velocity >= self.head_thre_dist * self.ratio_fps
                     #########################################
                     # 手部狀態
-                    if is_fast_wrist and self.is_wrist_higher_elbow(left_elbow, self.left_wrist, right_elbow,
+                    if is_fast_wrist and self.is_wrist_higher_elbow(self.left_elbow, self.left_wrist, self.right_elbow,
                                                                     self.right_wrist) and self.is_ankle_lower_than_hip:
                         self.hand_shift_flag = 1
                         # print(f'手腕位移速度超過門檻值右:{self.right_velocity}; 左:{self.left_velocity}')
@@ -420,14 +427,26 @@ class PoseEstimator(object):
                         self.head_harm_alert_sent = False
                         
             if self.record_diagram_to_csv:
+
+                # --- [新增] 提取 Y 座標並加入防呆機制 ---
+                # (推論：若該幀未偵測到關節點，給予預設值 0)
+                r_wrist_y = self.right_wrist[1] if self.right_wrist is not None else 0
+                r_elbow_y = self.right_elbow[1] if self.right_elbow is not None else 0
+                l_wrist_y = self.left_wrist[1] if self.left_wrist is not None else 0
+                l_elbow_y = self.left_elbow[1] if self.left_elbow is not None else 0
+
                 # 記錄到 CSV 手腕位移距離與速度
                 with open(self.csv_hand, mode='a', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(
                         [frame_count, 
+                        r_wrist_y,             # [新增] 右手腕高度
+                        r_elbow_y,             # [新增] 右手肘高度
                         round(self.right_velocity),
                         self.right_elbow_angle,
                         self.right_avg_angle,  # 這些資料如果沒變化會是 0
+                        l_wrist_y,             # [新增] 左手腕高度
+                        l_elbow_y,             # [新增] 左手肘高度
                         round(self.left_velocity),
                         self.left_elbow_angle,
                         self.left_avg_angle,  # 這些資料如果沒變化會是 0
@@ -536,22 +555,10 @@ class PoseEstimator(object):
         self.hand_shift_flag = 0
         self.head_shift_flag = 0
         
-        # 清空複製的幀數據
-        # self.frame_data = dict()
-        # self.frame_data_copy = dict()
+        # --- [新增] 清除關節點暫存 ---
+        self.right_wrist = None
+        self.left_wrist = None
+        self.right_elbow = None
+        self.left_elbow = None
     
 
-
-
-
-# AB左牆壁線
-# left_wall_start = wall_info.left_wall_line[0]  # (60, 120)
-# left_wall_end = wall_info.left_wall_line[-1]   # (100, 80)
-# 左右腳ankle near AB wall dist
-# self.min_leftAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(left_ankle, left_wall_start, left_wall_end)
-# self.min_rightAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(right_ankle, left_wall_start, left_wall_end)
-
-# if self.min_leftAnkleNearLeftWallDist < self.ankle_thre_dist or self.min_rightAnkleNearLeftWallDist < self.ankle_thre_dist:
-#     self.near_ankle_state = True
-# else:
-#     self.near_ankle_state = False
