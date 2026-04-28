@@ -110,7 +110,7 @@ class VideoRecordsThread(threading.Thread):
 
 class DetectThread(threading.Thread):
 
-    def __init__(self, cam_id, cam, model, model_lock, device, base_dir, fps, names, half, imgsz, config=None):
+    def __init__(self, cam_id, cam, model, model_lock, device, base_dir, fps, names, half, imgsz, config=None, audio_recorder=None):
         super().__init__(daemon=True)
         self.cfg = config if config else {}
 
@@ -118,6 +118,9 @@ class DetectThread(threading.Thread):
         self.stop_event = STOP_EVENT
         self.shared_frame_queue = queue.Queue(maxsize=10)
         self.cam_id = cam_id
+
+        # 【新增】音訊錄製器 (可為 None；用於在 24h WAV 旁邊註記自傷事件)
+        self.audio_recorder = audio_recorder
         
         self.cam = cam
         self.model = model
@@ -262,18 +265,32 @@ class DetectThread(threading.Thread):
         # ==================== [新增] FPS 延遲校正狀態機 ====================
         # 若在校正完成前就觸發錄影，將使用啟動時傳入的保守 fps 當作備用基準 (來源：合理推論，避免除以零)
         self.calibrated_fps = fps if fps > 0 else 15 
-        self.is_fps_calibrated = False   # 標記是否已經完成有人狀態的 FPS 校正
-        self.load_fps_buffer = []        # 用來收集 30 幀的單幀耗時
         # ===================================================================
+        # 【核心修改】判斷影像來源是否為預錄影片檔案 (VideoFileThread 具有 video_path 屬性)
+        self.is_video_mode = hasattr(self.cam, 'video_path')
 
-        # self.pre_event_seconds = 10
-        # self.post_event_seconds = 10
+        if self.is_video_mode:
+            # 影片模式：直接鎖定狀態，跳過 50 影格的等待
+            self.is_fps_calibrated = True   
+            # 強制提前初始化 Pose Estimator 的緩衝序列，確保第 1 影格就開始紀錄軌跡
+            self.pose_estimator.update_fps(self.calibrated_fps)
+            print(f"[Cam{self.cam_id}] 影片模式：略過動態 FPS 校正，直接啟用演算法 (FPS: {self.calibrated_fps})")
+        else:
+            # 實時相機模式：保留動態校正機制
+            self.is_fps_calibrated = False   # 標記是否已經完成有人狀態的 FPS 校正
+            self.load_fps_buffer = []        # 用來收集單幀耗時
+
+        # ===================================================================
         self.b_recording = False
         self.event_start_time = 0 
         # self.eventWriter = None
         # 實例化背景錄影類別 *************
         self.record_thread = None
         self.record_queue = queue.Queue()
+
+        # [新增] 視覺化錄影用的 Queue 與狀態
+        self.visual_record_queue = queue.Queue()
+        self.visual_record_thread = None
         # *******************************
         # 初始化路徑變數
         self.final_cam_path = None
@@ -300,6 +317,7 @@ class DetectThread(threading.Thread):
         try:
             self.prev_time = time.time()
             while self.running:
+
                 if self.stop_event.is_set():
                     break
                 
@@ -431,7 +449,11 @@ class DetectThread(threading.Thread):
                             self.scaled_thickness,  # 根據縮放比例調整粗細
                             cv2.LINE_AA)
                 
-
+                # [新增] 在右下角繪製影格計數 (確認影片是否有在動)
+                cv2.putText(im0, f'Frame: {self.frame_count}', 
+                            (int(im0.shape[1]-200), int(im0.shape[0]-20)), 
+                            cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness)
+                
                 if len(pred[0]):
                     # 【核心修改】偵測到人時的延遲校正機制
                     if not self.is_fps_calibrated:
@@ -474,6 +496,8 @@ class DetectThread(threading.Thread):
                         # _, R_vel, R_agl, avg_Ragl, L_vel, L_agl, avg_Lagl, hand_count, hand_alert_signal, near_ankle_state, leftAnkle_near_disL, rightAnkle_near_disL, leftAnkle_near_disR, rightAnkle_near_disR, nose_velocity, head_count, head_alert_signal, head_angle_change = self.pose_estimator.update_hand_info(kpts_list, self.frame_count)
                         
                         self.pose_estimator.update_hand_info(kpts_list, self.frame_count)
+                        
+                        
                         # 調整文字顯示的位置，因為影像被裁切放大，需要調整
                         cv2.putText(im0, f'Cam: {self.cam_id}', (int(80 * self.scale_x), int(10 * self.scale_y)), cv2.FONT_HERSHEY_SIMPLEX, self.scaled_text_size, self.white, self.scaled_thickness, cv2.LINE_AA)
 
@@ -508,33 +532,37 @@ class DetectThread(threading.Thread):
 
                             if not self.b_recording:
                                 self.b_recording = True
-                                
-                                # 【修改 2】 動態生成當下的日期資料夾
+
+                                # 【新增】rising edge：在 24h 音檔的 sidecar CSV 註記事件
+                                if self.audio_recorder is not None:
+                                    try:
+                                        alert_label = self.current_alert_state or "self_harm"
+                                        self.audio_recorder.mark_alert(self.cam_id, alert_label)
+                                    except Exception as e:
+                                        print(f"[Cam{self.cam_id}] 寫入音檔事件註記失敗：{e}")
+
+                                # --- 修正點 1：必須先生成日期與檔名基礎，才能給路徑使用 ---
                                 now = datetime.now()
-                                date_str = now.strftime("%Y/%m/%d")  # 例如 2025/12/29
+                                date_str = now.strftime("%Y/%m/%d")  
                                 timestamp = now.strftime("%Y%m%d_%H%M%S")
-
-                                # 組合當日的完整路徑
                                 current_save_dir = self.base_dir / date_str
+                                filename_base = f'Event_Cam{self.cam_id}_{timestamp}'
 
+                                # 確保資料夾存在
                                 if not current_save_dir.exists():
                                     current_save_dir.mkdir(parents=True, exist_ok=True)
-                                    print(f"[系統] 跨日或新啟動，建立新資料夾: {current_save_dir}")
-                    
-                                filename_base = f'Event_Cam{self.cam_id}_{timestamp}'
+                                    print(f"[系統] 建立新資料夾: {current_save_dir}")
+
+                                # --- 修正點 2：現在可以安全定義兩個影片的路徑了 ---
                                 self.final_cam_path = str(current_save_dir / f'{filename_base}.mp4')
-                                
+                                self.visual_cam_path = str(current_save_dir / f'{filename_base}_Visual.mp4')
+
                                 h, w = im0.shape[:2]
                                 record_fps = self.calibrated_fps
 
-                                # 確保路徑資料夾存在
-                                if not os.path.exists(os.path.dirname(self.final_cam_path)):
-                                    print(f"警告：資料夾不存在，嘗試建立：{os.path.dirname(self.final_cam_path)}")
-                                    os.makedirs(os.path.dirname(self.final_cam_path), exist_ok=True)
-                                
+                                # A. 啟動純淨影像錄影
                                 history_frames = list(self.frame_buffer)
                                 self.record_queue = queue.Queue()
-
                                 self.record_thread = VideoRecordsThread(
                                     filepath=self.final_cam_path, 
                                     fps=record_fps, 
@@ -542,10 +570,36 @@ class DetectThread(threading.Thread):
                                     pre_frames=history_frames, 
                                     record_queue=self.record_queue, 
                                     cam_id=self.cam_id
-                                    )
+                                )
                                 self.record_thread.start()
-                                print(f'[Cam{self.cam_id}] 背景錄影執行緒啟動 (FPS: {record_fps})')
+
+                                # B. 啟動視覺化影像錄影
+                                self.visual_record_queue = queue.Queue()
+                                self.visual_record_thread = VideoRecordsThread(
+                                    filepath=self.visual_cam_path,
+                                    fps=record_fps,
+                                    size=(w, h), # 使用 im0 的 640x480
+                                    pre_frames=[history_frames], 
+                                    record_queue=self.visual_record_queue,
+                                    cam_id=f"{self.cam_id}_Visual"
+                                )
+                                self.visual_record_thread.start()
+                                print(f'[Cam{self.cam_id}] 視覺化錄影已啟動：{self.visual_cam_path}')
+
+
+                # 當處於錄影狀態時，持續推送影像
+                if self.b_recording:
+                    # 推送純淨影像 (原有)
+                    self.record_queue.put(raw_frame.copy())
                     
+                    # [新增] 推送視覺化影像 (im0 是已經畫好骨幹的)
+                    if self.visual_record_thread is not None:
+                        self.visual_record_queue.put(im0.copy())
+                    
+                    # 檢查是否停止錄影
+                    if (time.time() - self.event_start_time) > self.post_event_seconds: 
+                        self.stop_recording_and_save()
+
                 self.frame_buffer.append(img0.copy())
                 
                 # 推送影像
@@ -556,7 +610,7 @@ class DetectThread(threading.Thread):
                         pass
                 self.shared_frame_queue.put((im0, self.current_alert_state))
                 self.frame_count += 1
-        
+
         except Exception as e:
             print(f"!!! Cam{self.cam_id} DetectThread 發生嚴重錯誤 !!!")
             traceback.print_exc()
@@ -581,10 +635,11 @@ class DetectThread(threading.Thread):
             self.record_queue.put(None)  # 放進None 作為結束標記
             self.recorder_thread = None  # 解除參照，讓下次可順利建立執行緒
             print(f'[Cam{self.cam_id}] 偵測事件結束，已發送背景寫入結束信號。')
-        # if self.eventWriter is not None:
-        #     self.eventWriter.release()
-        #     self.eventWriter = None
-        #     print(f"[Cam{self.cam_id}] 影片已錄製完成並儲存: {self.final_cam_path}")            
+            
+        # 2. [新增] 關閉視覺化影像錄影
+        if getattr(self, 'visual_record_thread', None) is not None:
+            self.visual_record_queue.put(None)
+            self.visual_record_thread = None         
 
     # ==========================================
     # 重置 AI 狀態

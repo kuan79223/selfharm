@@ -27,6 +27,8 @@ class VideoFileThread:
         self.running = True
         self.lock = threading.Lock()
         
+        self.frame_ready = False  # 新增：用來標記是否有全新的影格
+
         # 啟動讀取執行緒
         self.thread = threading.Thread(target=self.update, daemon=True)
         self.thread.start()
@@ -46,6 +48,7 @@ class VideoFileThread:
                 # 2. 寫入共享變數
                 with self.lock:
                     self.frame = frame
+                    self.frame_ready = True  # 新增：標記新影格已就緒
             else:
                 print(f"[{self.name}] 影片讀取完畢或發生錯誤")
                 self.running = False
@@ -66,7 +69,11 @@ class VideoFileThread:
     def read(self):
         """提供給 DetectThread 呼叫的介面"""
         with self.lock:
-            return self.frame.copy() if self.frame is not None else None
+            # 檢查是否有新影格，若有則回傳並消費掉 (Consume)；若無則回傳 None
+            if self.frame is not None and self.frame_ready:
+                self.frame_ready = False
+                return self.frame.copy()
+            return None
 
     def stop(self):
         """停止執行緒並釋放資源"""

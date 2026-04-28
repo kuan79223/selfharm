@@ -141,7 +141,19 @@ class PoseEstimator(object):
             # 初始化 CSV，寫入標頭
             with open(self.csv_hand, mode='w', newline='') as file:
                 writer = csv.writer(file)
-                writer.writerow(['Frame', 'R_Wrist_Y', 'R_Elbow_Y', 'R_Velocity', 'R_Angel', 'R_AvgAgl', 'L_Wrist_Y', 'L_Elbow_Y', 'L_Velocity', 'L_Angel', 'L_AvgAgl', 'Count', 'Self Harm']) # 手肘角度
+                writer.writerow(['Frame', 
+                                 'R_Wrist_Y', 
+                                 'R_Elbow_Y', 
+                                 'R_Velocity', 
+                                 'R_Angel', 
+                                 'R_AvgAgl', 
+                                 'L_Wrist_Y', 
+                                 'L_Elbow_Y', 
+                                 'L_Velocity', 
+                                 'L_Angel', 
+                                 'L_AvgAgl', 
+                                 'Count', 
+                                 'Self Harm']) # 手肘角度
 
             # 觀察鼻子與牆壁距離 / 頭部的位移速度
             with open(self.csv_head, mode='w', newline='') as file:
@@ -156,37 +168,19 @@ class PoseEstimator(object):
             self.frame_queue = Queue(maxsize=self.queue_size)
             self.continues_queue = Queue(maxsize=self.queue_size)
             print(f'更新fps: {fps_size}，新的序列長度: {self.queue_size}')
-            self.ratio_fps = 6 / fps_size  # 以12為base 序列長度 作為比例換算
+            # 以12為base 序列長度 作為比例換算
+            self.ratio_fps = 6 / fps_size  
             print(f'手腕位移速度需要超過" {round(self.threshold_distance * self.ratio_fps)}')
-            self.thres_count = round(self.queue_size * 0.5)  # 以序列長度的一半作為門檻值
+            # 以序列長度的一半作為門檻值
+            self.thres_count = round(self.queue_size * 0.5)  
             print(f'定義門檻次數{self.thres_count}')
             self.thre_velocity = round(self.threshold_distance * self.ratio_fps)  # 50 * 1
             print(f'位移速度比例換算: {self.thre_velocity}')
 
     def update_hand_info(self, kpts_list, frame_count):
         
-        # 每一幀的骨幹與狀態資料預設值
-        frame_data_default = {
-            "frame_count": frame_count,
-            'timestamp': time.time(),
-            "right_wrist": [0, 0], 
-            "left_wrist": [0, 0],
-            "right_elbow_angle": 0,
-            "left_elbow_angle": 0,
-            "nose": [0, 0],
-            "hand_shift_flag": 0,
-            "head_shift_flag": 0,
-            "right_ankle": [0, 0],
-            "left_ankle": [0, 0],
-            "right_velocity": 0,
-            "left_velocity": 0
-            
-        }
-
-
         valid_kpts = [kpt for kpt in kpts_list if kpt[2] > 0.5]
-        # print(f'骨幹列表{kpts_list}, 長度{len(kpts_list)}')
-        self.current_timestamp = time.time()
+        
         #########################################
         # 可以 Loss 掉兩個低於門檻值的關節點
         if len(valid_kpts) >= 15:
@@ -198,20 +192,15 @@ class PoseEstimator(object):
             right_shoulder, self.right_elbow, self.right_wrist = kpts_list[6][:2], kpts_list[8][:2], kpts_list[10][:2]
             left_ankle, right_ankle = kpts_list[15][:2], kpts_list[16][:2]
             self.near_ankle_state = False
-
+            print(self.right_wrist)
             # 計算手肘角度
             self.right_elbow_angle = getAngle([right_shoulder, self.right_elbow, self.right_wrist])
             self.left_elbow_angle = getAngle([left_shoulder, self.left_elbow, self.left_wrist])
-            # print(f'右手肘角度{self.right_elbow_angle}; 左手肘角度{self.left_elbow_angle}')
             self.curr_body_center = get_body_center([left_shoulder, right_shoulder, left_hip, right_hip])
-            # print([left_shoulder, right_shoulder, left_hip, right_hip])
-            # print(self.curr_body_center)
+            
             calculate_distance = self.calculate_distance(self.prev_body_center, self.curr_body_center) 
 
-            # print('座標', self.prev_body_center, self.curr_body_center)
-
             self.prev_body_center = self.curr_body_center # 保持前一幀的身體中心不變
-
             if calculate_distance >= 100:  # 如果身體中心移動距離過大，可能是偵測錯誤，跳過這幀的計算
                 print(f'身體中心移動距離過大 ({calculate_distance:.2f})，可能是偵測錯誤，跳過計算')
                 return 
@@ -235,111 +224,89 @@ class PoseEstimator(object):
                     self.rightAnkleToRightWallDist < self.ankle_thre_dist):
                     self.near_ankle_state = True
                 
-                # 在實驗室環境下測試用
-                # # 左右腳
-                # self.min_leftAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center,
-                #                                                                               left_wall_end)
-                # self.min_rightAnkleNearLeftWallDist = self.calculate_distance_point_to_segment(right_ankle, wall_center,
-                #                                                                                left_wall_end)
-                # # 右牆壁 (如果需要)
-                # self.min_leftAnkleNearRightWallDist = self.calculate_distance_point_to_segment(left_ankle, wall_center,
-                #                                                                                right_wall_end)
-                # self.min_rightAnkleNearRightWallDist = self.calculate_distance_point_to_segment(right_ankle,
-                #                                                                                 wall_center,
-                #                                                                                 right_wall_end)
-
-                # if self.min_leftAnkleNearLeftWallDist < self.ankle_thre_dist or self.min_rightAnkleNearLeftWallDist < self.ankle_thre_dist:
-                #     self.near_ankle_state = True
                 else:
                     self.near_ankle_state = False
             else:
-                # Fallback if no config provided (optional, or keep 0)
                 self.near_ankle_state = False
                 
             # 若隊列非空，計算當前幀與上一幀的位移速度
-            if self.frame_queue:
-                if not self.frame_queue.empty():
-                    prev_frame = self.frame_queue.queue[-1]  # 取得最近的上一幀
+            if self.frame_queue and not self.frame_queue.empty():
 
-                    prev_right_wrist = np.array(prev_frame.get("right_wrist", [0, 0]))  # 使用 .get 保證存在
-                    prev_left_wrist = np.array(prev_frame.get("left_wrist", [0, 0]))
-                    prev_nose = np.array(prev_frame.get('nose', [0, 0]))
-                    prev_right_ankle = np.array(prev_frame.get("right_ankle", [0, 0]))
-                    prev_left_ankle = np.array(prev_frame.get("left_ankle", [0, 0]))
+                frame_data = self.frame_queue.queue[-1]  # 取得最近的上一幀
+                frame_data['frame_count'] = frame_count
+                self.current_timestamp = time.time()
 
-                    prev_left_shoulder = np.array(prev_frame.get("left_shoulder", [0, 0]))
-                    prev_right_shoulder = np.array(prev_frame.get("right_shoulder", [0, 0]))
-                    prev_left_hip = np.array(prev_frame.get("left_hip", [0, 0]))
-                    prev_right_hip = np.array(prev_frame.get("right_hip", [0, 0]))
+                # 手腕位移距離 ==============================================================================
+                self.right_distance = self.calculate_distance(frame_data["right_wrist"], self.right_wrist)
 
-                    prev_timestamp = prev_frame.get("timestamp", self.current_timestamp)
-                    # prev_timestamp = self.frame_data["timestamp"]
+                self.left_distance = self.calculate_distance(frame_data["left_wrist"], self.left_wrist)
+                self.nose_distance = self.calculate_distance(frame_data['nose'], self.nose)
+                # 時間間隔: 兩個連續的時間戳非常接近，導致它們的差值幾乎為 0，甚至可能出現 0，0不能當被除數，防止出錯
+                self.time_interval = self.current_timestamp - frame_data['timestamp']
 
-                    # 手腕位移距離 ==============================================================================
-                    self.right_distance = self.calculate_distance(prev_right_wrist, self.right_wrist)
-                    self.left_distance = self.calculate_distance(prev_left_wrist, self.left_wrist)
-                    # print(f'手腕位移右:{self.right_distance}; 左:{self.left_distance}')
-                    self.nose_distance = self.calculate_distance(prev_nose, self.nose)
-                    # 時間間隔: 兩個連續的時間戳非常接近，導致它們的差值幾乎為 0，甚至可能出現 0，0不能當被除數，防止出錯
-                    self.time_interval = self.current_timestamp - prev_timestamp
+                # print(self.time_interval)
+                if self.time_interval > 0.001:  # 避免除以 0 或極小值
+                    frame_data['timestamp'] = self.current_timestamp
+                    # # 手腕位移速度
+                    frame_data['right_velocity'] = self.right_distance / self.time_interval
+                    frame_data['left_velocity'] = self.left_distance / self.time_interval
+                    frame_data['nose_velocity'] = self.nose_distance / self.time_interval
+                    
+                # 判斷是否超過門檻 --------------------------------
+                is_fast_wrist = (self.threshold_distance * self.ratio_fps <= self.right_velocity) or (
+                            self.threshold_distance * self.ratio_fps <= self.left_velocity)
+                # ================================================================================================
+                is_fast_head = self.nose_velocity >= self.head_thre_dist * self.ratio_fps
+                #########################################
+                # 手部狀態
+                if is_fast_wrist and self.is_wrist_higher_elbow(self.left_elbow, self.left_wrist, self.right_elbow,
+                                                                self.right_wrist) and self.is_ankle_lower_than_hip:
+                    self.hand_shift_flag = 1
+                    # print(f'手腕位移速度超過門檻值右:{self.right_velocity}; 左:{self.left_velocity}')
+                else:
+                    self.hand_shift_flag = 0
 
-                    if self.time_interval > 0.001:  # 避免除以 0 或極小值
-                        # # 手腕位移速度
-                        self.right_velocity = (self.right_distance / self.time_interval)
-                        self.left_velocity = (self.left_distance / self.time_interval)
-                        # print(f'手腕位移速度右:{self.right_velocity}; 左:{self.left_velocity}')
-                        self.nose_velocity = self.nose_distance / self.time_interval
-                    else:
-                        self.right_velocity = 0
-                        self.left_velocity = 0
-                        self.nose_velocity = 0
-
-                    # 判斷是否超過門檻 --------------------------------
-                    is_fast_wrist = (self.threshold_distance * self.ratio_fps <= self.right_velocity) or (
-                                self.threshold_distance * self.ratio_fps <= self.left_velocity)
-                    # ================================================================================================
-                    is_fast_head = self.nose_velocity >= self.head_thre_dist * self.ratio_fps
-                    #########################################
-                    # 手部狀態
-                    if is_fast_wrist and self.is_wrist_higher_elbow(self.left_elbow, self.left_wrist, self.right_elbow,
-                                                                    self.right_wrist) and self.is_ankle_lower_than_hip:
-                        self.hand_shift_flag = 1
-                        # print(f'手腕位移速度超過門檻值右:{self.right_velocity}; 左:{self.left_velocity}')
-                    else:
-                        self.hand_shift_flag = 0
-
-                    # 頭部狀態
-                    if self.near_ankle_state and is_fast_head:
-                        self.head_shift_flag = 1
-                        # print(f'鼻子位移速度超過門檻值:{self.nose_velocity}')
-                    else:
-                        self.head_shift_flag = 0
+                # 頭部狀態
+                if self.near_ankle_state and is_fast_head:
+                    self.head_shift_flag = 1
+                    # print(f'鼻子位移速度超過門檻值:{self.nose_velocity}')
+                else:
+                    self.head_shift_flag = 0
 
                 # 正常處理當前幀資料
-                frame_data_default["right_wrist"] = self.right_wrist
-                frame_data_default["left_wrist"] = self.left_wrist
-                frame_data_default["right_elbow_angle"] = self.right_elbow_angle
-                frame_data_default["left_elbow_angle"] = self.left_elbow_angle
-                frame_data_default["nose"] = self.nose
-                frame_data_default["hand_shift_flag"] = self.hand_shift_flag
-                frame_data_default["head_shift_flag"] = self.head_shift_flag
-                frame_data_default["right_ankle"] = right_ankle
-                frame_data_default["left_ankle"] = left_ankle
-                frame_data_default['right_velocity'] = self.right_velocity
-                frame_data_default['left_velocity'] = self.left_velocity
+                frame_data["right_wrist"] = self.right_wrist
+                frame_data["left_wrist"] = self.left_wrist
+                frame_data["right_elbow"] = self.right_elbow
+                frame_data["left_elbow"] = self.left_elbow
+                frame_data["right_elbow_angle"] = self.right_elbow_angle
+                frame_data["left_elbow_angle"] = self.left_elbow_angle
+                frame_data["nose"] = self.nose
+                frame_data["hand_shift_flag"] = self.hand_shift_flag
+                frame_data["head_shift_flag"] = self.head_shift_flag
+                frame_data["right_ankle"] = right_ankle
+                frame_data["left_ankle"] = left_ankle
+                frame_data['near_ankle_state'] = self.near_ankle_state
+                frame_data['hand_harm_alert_sent'] = self.hand_harm_alert_sent
+                frame_data['head_harm_alert_sent'] = self.head_harm_alert_sent
 
-        else:
-            # print(f'Frame {frame_count} 無骨幹，使用前一幀數據進行補值')
-            self.hand_shift_flag = 0
-            self.head_shift_flag = 0
-            self.hand_trigger_event = 0
-            self.head_trigger_event = 0
-            self.right_velocity = 0
-            self.left_velocity = 0
-            # 如果人消失了，警報狀態必須強制解除，否則會卡在 True
-            self.near_ankle_state = False  # <--- 接近牆壁線狀態
-            self.hand_harm_alert_sent = False
-            self.head_harm_alert_sent = False
+            else:
+                frame_data = {
+                    "frame_count": frame_count,
+                    'timestamp': time.time(),
+                    "right_wrist": [0, 0], 
+                    "left_wrist": [0, 0],
+                    "right_elbow": [0, 0], 
+                    "left_elbow": [0, 0],
+                    "right_elbow_angle": 0,
+                    "left_elbow_angle": 0,
+                    "nose": [0, 0],
+                    "hand_shift_flag": 0,
+                    "head_shift_flag": 0,
+                    "right_ankle": [0, 0],
+                    "left_ankle": [0, 0],
+                    "right_velocity": 0,
+                    "left_velocity": 0
+                }
                 
         # 將每一幀的數據備分 ##############################################################
         # self.frame_data_copy = self.frame_data.copy()
@@ -350,15 +317,13 @@ class PoseEstimator(object):
             if self.frame_queue.full():
                 self.frame_queue.get()
             ##############################################################
-            self.frame_queue.put(frame_data_default)
+            self.frame_queue.put(frame_data)
 
         ##############################################################
         if self.frame_queue:
             if self.frame_queue.qsize() >= self.queue_size:
 
                 # 從隊列中提取所有幀的手腕 Y 座標
-                # right_wrist_y_list = [frame["right_wrist"][1] for frame in list(self.frame_queue.queue)]
-                # left_wrist_y_list = [frame["left_wrist"][1] for frame in list(self.frame_queue.queue)]
                 right_wrist_y_list = [frame.get("right_wrist", [0, 0])[1] for frame in list(self.frame_queue.queue)]
                 left_wrist_y_list = [frame.get("left_wrist", [0, 0])[1] for frame in list(self.frame_queue.queue)]
                 # 計算右手腕 Y 軸最大與最小差
@@ -427,29 +392,22 @@ class PoseEstimator(object):
                         self.head_harm_alert_sent = False
                         
             if self.record_diagram_to_csv:
-
-                # --- [新增] 提取 Y 座標並加入防呆機制 ---
-                # (推論：若該幀未偵測到關節點，給予預設值 0)
-                r_wrist_y = self.right_wrist[1] if self.right_wrist is not None else 0
-                r_elbow_y = self.right_elbow[1] if self.right_elbow is not None else 0
-                l_wrist_y = self.left_wrist[1] if self.left_wrist is not None else 0
-                l_elbow_y = self.left_elbow[1] if self.left_elbow is not None else 0
-
+                
                 # 記錄到 CSV 手腕位移距離與速度
                 with open(self.csv_hand, mode='a', newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow(
                         [frame_count, 
-                        r_wrist_y,             # [新增] 右手腕高度
-                        r_elbow_y,             # [新增] 右手肘高度
-                        round(self.right_velocity),
-                        self.right_elbow_angle,
-                        self.right_avg_angle,  # 這些資料如果沒變化會是 0
-                        l_wrist_y,             # [新增] 左手腕高度
-                        l_elbow_y,             # [新增] 左手肘高度
-                        round(self.left_velocity),
-                        self.left_elbow_angle,
-                        self.left_avg_angle,  # 這些資料如果沒變化會是 0
+                        frame_data["right_wrist"][1],             # [新增] 右手腕高度
+                        frame_data["right_elbow"][1],             # [新增] 右手肘高度
+                        round(frame_data['right_velocity']),
+                        frame_data['right_elbow_angle'],
+                        self.right_avg_angle,
+                        frame_data["left_wrist"][1],             # [新增] 左手腕高度
+                        frame_data["left_elbow"][1],             # [新增] 左手肘高度
+                        round(frame_data['left_velocity']),
+                        frame_data['left_elbow_angle'],
+                        self.left_avg_angle,  
                         self.hand_shift_count,
                         self.hand_harm_alert_sent])
                 

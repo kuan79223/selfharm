@@ -243,13 +243,15 @@ class BackendSystem:
         sys_logger.log(f"啟動相機接收 Port: {CAM0_PORT}, {CAM1_PORT}")
 
         self.cams = []
+        # ===== 正式模式：透過 ZMQ 接收 RPi 的網路相機 =====
         # self.cams.append(CameraThread(port=CAM0_PORT, name='Cam0', rotate=True))
         # self.cams.append(CameraThread(port=CAM1_PORT, name='Cam1', rotate=True))
 
-        # 取得目前此程式碼檔案所在的資料夾路徑
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        base_dir = '/mnt/usb_ssd/Project/Continuous/2026/04/23/'
-        video_filename = 'Cam1_Continuous_20260423_19.mp4'
+
+        # ===== 測試模式：讀本地 mp4 (要用時把上面兩行註解掉再放開下面) =====
+        # base_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = 'test_video'
+        video_filename = 'ku_test_slap.mp4'
         full_path = os.path.join(base_dir, video_filename)
         self.cams.append(VideoFileThread(
             video_path=full_path, 
